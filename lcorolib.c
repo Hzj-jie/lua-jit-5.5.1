@@ -167,9 +167,11 @@ static int luaB_yieldable (lua_State *L) {
 
 
 static int luaB_corunning (lua_State *L) {
-  int ismain = lua_pushthread(L);
-  lua_pushboolean(L, ismain);
-  return 2;
+  if (lua_pushthread(L)) {
+    lua_pop(L, 1);
+    lua_pushnil(L);
+  }
+  return 1;
 }
 
 

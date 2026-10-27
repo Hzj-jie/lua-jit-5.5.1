@@ -7,8 +7,9 @@ local debug = require'debug'
 
 local f
 
-local main, ismain = coroutine.running()
-assert(type(main) == "thread" and ismain)
+local main = debug.getregistry()[3]
+local r1, ismain = coroutine.running()
+assert(r1 == nil and ismain == nil)
 assert(not coroutine.resume(main))
 assert(not coroutine.isyieldable(main) and not coroutine.isyieldable())
 assert(not pcall(coroutine.yield))
@@ -33,7 +34,7 @@ _G.x = nil   -- declare x
 _G.f = nil   -- declare f
 local function foo (a, ...)
   local x, y = coroutine.running()
-  assert(x == f and y == false)
+  assert(x == f and y == nil)
   -- next call should not corrupt coroutine (but must fail,
   -- as it attempts to resume the running coroutine)
   assert(coroutine.resume(f) == false)
@@ -156,7 +157,8 @@ do
   st, msg = coroutine.close(co)
   assert(st and msg == nil)
 
-  local main = coroutine.running()
+  local main = debug.getregistry()[3]
+  assert(coroutine.running() == nil)
 
   -- cannot close 'main'
   local st, msg = pcall(coroutine.close, main);
@@ -504,7 +506,8 @@ assert(coroutine.resume(co, co) == false)
 -- other old bug when attempting to resume itself
 -- (trigger C-code assertions)
 do
-  local A = coroutine.running()
+  local A = debug.getregistry()[3]
+  assert(coroutine.running() == nil)
   local B = coroutine.create(function() return coroutine.resume(A) end)
   local st, res = coroutine.resume(B)
   assert(st == true and res == false)
@@ -848,7 +851,7 @@ if not _soft then
 end
 
 
-assert(coroutine.running() == main)
+assert(coroutine.running() == nil)
 
 print"+"
 

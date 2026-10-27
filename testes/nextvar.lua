@@ -484,7 +484,7 @@ do    -- testing 'next' with all kinds of keys
     [string.rep('x', 1000)] = 4,    -- long string
     [print] = 5,                    -- C function
     [checkerror] = 6,               -- Lua function
-    [coroutine.running()] = 7,      -- thread
+    [coroutine.create(function() end)] = 7,      -- thread
     [true] = 8,                     -- boolean
     [io.stdin] = 9,                 -- userdata
     [{}] = 10,                      -- table

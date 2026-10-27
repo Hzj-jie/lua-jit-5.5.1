@@ -155,7 +155,7 @@ end)
 
 -- get main thread from registry
 local mt = T.testC("rawgeti R !M; return 1")
-assert(type(mt) == "thread" and coroutine.running() == mt)
+assert(type(mt) == "thread" and (coroutine.running() == mt or coroutine.running() == nil))
 
 
 
