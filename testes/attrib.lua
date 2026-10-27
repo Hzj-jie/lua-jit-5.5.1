@@ -285,6 +285,10 @@ else
   local f_c_abi = assert(package.loadlib(DC"lib1", p.."test_c_abi"))
   assert(f_c_abi() == true)
 
+  -- test 5.1 luaL_Buffer ABI
+  local f_buf = assert(package.loadlib(DC"lib1", p.."test_buffer_51"))
+  assert(f_buf() == true)
+
   -- check error messages
   local f, err, when = package.loadlib(DC"lib1", p.."xuxu")
   assert(not f and type(err) == "string" and when == "init")

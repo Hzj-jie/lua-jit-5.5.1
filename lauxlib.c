@@ -1281,3 +1281,102 @@ LUALIB_API ptrdiff_t luaL_optinteger (lua_State *L, int arg, ptrdiff_t def) {
   return (ptrdiff_t)lua55_L_optinteger(L, arg, (lua_Integer)def);
 }
 
+
+/*
+** Lua 5.1 / LuaJIT compatibility Buffer implementation
+*/
+#define bufflen_51(B)	((size_t)((B)->p - (B)->buffer))
+#define bufffree_51(B)	((size_t)(LUAL_BUFFERSIZE_51 - bufflen_51(B)))
+
+#define LIMIT_51	(LUA_MINSTACK/2)
+
+static int emptybuffer_51 (luaL_Buffer_51 *B) {
+  size_t l = bufflen_51(B);
+  if (l == 0) return 0;
+  else {
+    lua_pushlstring(B->L, B->buffer, l);
+    B->p = B->buffer;
+    B->lvl++;
+    return 1;
+  }
+}
+
+static void adjuststack_51 (luaL_Buffer_51 *B) {
+  if (B->lvl > 1) {
+    lua_State *L = B->L;
+    int toget = 1;
+    size_t toplen = lua_rawlen(L, -1);
+    do {
+      size_t l = lua_rawlen(L, -(toget + 1));
+      if (B->lvl - toget + 1 >= LIMIT_51 || toplen > l) {
+        toplen += l;
+        toget++;
+      }
+      else break;
+    } while (toget < B->lvl);
+    lua_concat(L, toget);
+    B->lvl = B->lvl - toget + 1;
+  }
+}
+
+#undef luaL_buffinit
+#undef luaL_prepbuffer
+#undef luaL_addlstring
+#undef luaL_addstring
+#undef luaL_addvalue
+#undef luaL_pushresult
+
+LUALIB_API void luaL_buffinit (lua_State *L, luaL_Buffer_51 *B) {
+  B->L = L;
+  B->p = B->buffer;
+  B->lvl = 0;
+}
+
+LUALIB_API char *luaL_prepbuffer (luaL_Buffer_51 *B) {
+  if (emptybuffer_51(B))
+    adjuststack_51(B);
+  return B->buffer;
+}
+
+LUALIB_API void luaL_addlstring (luaL_Buffer_51 *B, const char *s, size_t l) {
+  while (l > 0) {
+    size_t n = bufffree_51(B);
+    if (n == 0) {
+      luaL_prepbuffer(B);
+      n = bufffree_51(B);
+    }
+    if (n > l) n = l;
+    memcpy(B->p, s, n);
+    B->p += n;
+    s += n;
+    l -= n;
+  }
+}
+
+LUALIB_API void luaL_addstring (luaL_Buffer_51 *B, const char *s) {
+  luaL_addlstring(B, s, strlen(s));
+}
+
+LUALIB_API void luaL_addvalue (luaL_Buffer_51 *B) {
+  lua_State *L = B->L;
+  size_t vl;
+  const char *s = lua_tolstring(L, -1, &vl);
+  if (vl <= bufffree_51(B)) {
+    memcpy(B->p, s, vl);
+    B->p += vl;
+    lua_pop(L, 1);
+  }
+  else {
+    if (emptybuffer_51(B))
+      lua_insert(L, -2);
+    B->lvl++;
+    adjuststack_51(B);
+  }
+}
+
+LUALIB_API void luaL_pushresult (luaL_Buffer_51 *B) {
+  emptybuffer_51(B);
+  lua_concat(B->L, B->lvl);
+  B->lvl = 1;
+}
+

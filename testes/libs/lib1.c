@@ -185,7 +185,39 @@ LUAMOD_API int test_c_abi (lua_State *L) {
 
   lua_pushboolean(L, 1);
   return 1;
-} 
+}
+
+
+#undef luaL_buffinit
+#undef luaL_addstring
+#undef luaL_addlstring
+#undef luaL_pushresult
+#undef luaL_prepbuffer
+
+LUAMOD_API int test_buffer_51 (lua_State *L) {
+  luaL_Buffer_51 b;
+  int i;
+  luaL_buffinit(L, &b);
+  luaL_addstring(&b, "hello ");
+  luaL_addlstring(&b, "world", 5);
+  luaL_pushresult(&b);
+  if (strcmp(lua_tostring(L, -1), "hello world") != 0)
+    return luaL_error(L, "buffer basic test failed");
+  lua_pop(L, 1);
+
+  /* test buffer exceeding 8192 bytes */
+  luaL_buffinit(L, &b);
+  for (i = 0; i < 2000; i++) {
+    luaL_addstring(&b, "12345");
+  }
+  luaL_pushresult(&b);
+  if (lua_rawlen(L, -1) != 10000)
+    return luaL_error(L, "buffer overflow/concat test failed");
+  lua_pop(L, 1);
+
+  lua_pushboolean(L, 1);
+  return 1;
+}
 
 
 LUAMOD_API int luaopen_lib1_sub (lua_State *L) {

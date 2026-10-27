@@ -206,24 +206,52 @@ struct luaL_Buffer {
 #define luaL_buffaddr(bf)	((bf)->b)
 
 
+/*
+** Lua 5.1 / LuaJIT compatibility Buffer
+*/
+#define LUAL_BUFFERSIZE_51	(BUFSIZ > 16384 ? 8192 : BUFSIZ)
+
+typedef struct luaL_Buffer_51 {
+  char *p;
+  int lvl;
+  lua_State *L;
+  char buffer[LUAL_BUFFERSIZE_51];
+} luaL_Buffer_51;
+
+LUALIB_API void (luaL_buffinit) (lua_State *L, luaL_Buffer_51 *B);
+LUALIB_API char *(luaL_prepbuffer) (luaL_Buffer_51 *B);
+LUALIB_API void (luaL_addlstring) (luaL_Buffer_51 *B, const char *s, size_t l);
+LUALIB_API void (luaL_addstring) (luaL_Buffer_51 *B, const char *s);
+LUALIB_API void (luaL_addvalue) (luaL_Buffer_51 *B);
+LUALIB_API void (luaL_pushresult) (luaL_Buffer_51 *B);
+
+#define luaL_buffinit       lua55_L_buffinit
+#define luaL_prepbuffsize   lua55_L_prepbuffsize
+#define luaL_addlstring     lua55_L_addlstring
+#define luaL_addstring      lua55_L_addstring
+#define luaL_addvalue       lua55_L_addvalue
+#define luaL_pushresult     lua55_L_pushresult
+#define luaL_pushresultsize lua55_L_pushresultsize
+#define luaL_buffinitsize   lua55_L_buffinitsize
+
+LUALIB_API void (lua55_L_buffinit) (lua_State *L, luaL_Buffer *B);
+LUALIB_API char *(lua55_L_prepbuffsize) (luaL_Buffer *B, size_t sz);
+LUALIB_API void (lua55_L_addlstring) (luaL_Buffer *B, const char *s, size_t l);
+LUALIB_API void (lua55_L_addstring) (luaL_Buffer *B, const char *s);
+LUALIB_API void (lua55_L_addvalue) (luaL_Buffer *B);
+LUALIB_API void (lua55_L_pushresult) (luaL_Buffer *B);
+LUALIB_API void (lua55_L_pushresultsize) (luaL_Buffer *B, size_t sz);
+LUALIB_API char *(lua55_L_buffinitsize) (lua_State *L, luaL_Buffer *B, size_t sz);
+
 #define luaL_addchar(B,c) \
-  ((void)((B)->n < (B)->size || luaL_prepbuffsize((B), 1)), \
+  ((void)((B)->n < (B)->size || lua55_L_prepbuffsize((B), 1)), \
    ((B)->b[(B)->n++] = (c)))
 
 #define luaL_addsize(B,s)	((B)->n += (s))
 
 #define luaL_buffsub(B,s)	((B)->n -= (s))
 
-LUALIB_API void (luaL_buffinit) (lua_State *L, luaL_Buffer *B);
-LUALIB_API char *(luaL_prepbuffsize) (luaL_Buffer *B, size_t sz);
-LUALIB_API void (luaL_addlstring) (luaL_Buffer *B, const char *s, size_t l);
-LUALIB_API void (luaL_addstring) (luaL_Buffer *B, const char *s);
-LUALIB_API void (luaL_addvalue) (luaL_Buffer *B);
-LUALIB_API void (luaL_pushresult) (luaL_Buffer *B);
-LUALIB_API void (luaL_pushresultsize) (luaL_Buffer *B, size_t sz);
-LUALIB_API char *(luaL_buffinitsize) (lua_State *L, luaL_Buffer *B, size_t sz);
-
-#define luaL_prepbuffer(B)	luaL_prepbuffsize(B, LUAL_BUFFERSIZE)
+#define luaL_prepbuffer(B)	lua55_L_prepbuffsize(B, LUAL_BUFFERSIZE)
 
 /* }====================================================== */
 
