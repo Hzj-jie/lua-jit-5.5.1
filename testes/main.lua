@@ -64,7 +64,7 @@ end
 local function RUN (p, ...)
   p = string.gsub(p, "lua", '"'..progname..'"', 1)
   local s = string.format(p, ...)
-  assert(os.execute(s))
+  assert(os.execute(s) == 0)
 end
 
 
@@ -72,7 +72,7 @@ local function NoRun (msg, p, ...)
   p = string.gsub(p, "lua", '"'..progname..'"', 1)
   local s = string.format(p, ...)
   s = string.format("%s >%s 2>&1", s, out)  -- send output and error to 'out'
-  assert(not os.execute(s))
+  assert(os.execute(s) ~= 0)
   assert(string.find(getoutput(), msg, 1, true))  -- check error message
 end
 
@@ -551,7 +551,7 @@ print('testing Ctrl C')
 do
   -- interrupt a script
   local function kill (pid)
-    return os.execute(string.format('kill -INT %s 2> /dev/null', pid))
+    return os.execute(string.format('kill -INT %s 2> /dev/null', pid)) == 0
   end
 
   -- function to run a script in background, returning its output file
@@ -582,7 +582,7 @@ do
     print(15); string.find(string.rep('a', 100000), '.*b')]]
   -- wait (so script can reach the loop)
   assert(f:read() == "15")
-  assert(os.execute("sleep 1"))
+  assert(os.execute("sleep 1") == 0)
   -- must send at least two INT signals to stop this Lua script
   local n = 100
   for i = 0, 100 do   -- keep sending signals

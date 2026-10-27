@@ -145,10 +145,12 @@ static int os_execute (lua_State *L) {
   int stat;
   errno = 0;
   stat = l_system(cmd);
-  if (cmd != NULL)
-    return luaL_execresult(L, stat);
+  if (cmd != NULL) {
+    lua_pushinteger(L, stat);
+    return 1;
+  }
   else {
-    lua_pushboolean(L, stat);  /* true if there is a shell */
+    lua_pushinteger(L, stat != 0 ? 1 : 0);
     return 1;
   }
 }

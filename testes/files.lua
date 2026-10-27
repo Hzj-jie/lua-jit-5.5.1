@@ -804,16 +804,19 @@ if not _port then
     {progname .. ' -e "os.exit(20, true)"', "exit", 20},
   }
   print("\n(some error messages are expected now)")
+  assert(os.execute() == 1)
   for _, v in ipairs(tests) do
     local x, y, z = io.popen(v[1]):close()
-    local x1, y1, z1 = os.execute(v[1])
-    assert(x == x1 and y == y1 and z == z1)
+    local stat = os.execute(v[1])
+    assert(math.type(stat) == "integer")
     if v[2] == "ok" then
       assert(x and y == 'exit' and z == 0)
+      assert(stat == 0)
     else
       assert(not x and y == v[2])   -- correct status and 'what'
       -- correct code if known (but always different from 0)
       assert((v[3] == nil and z > 0) or v[3] == z)
+      assert(stat ~= 0)
     end
   end
   print("(done)")
