@@ -549,6 +549,71 @@ end
 local a, b = foo()()
 assert(a == 3 and b == 14)
 
+do
+  -- Lua 5.1 globals and libraries
+  -- unpack
+  local u1, u2, u3 = unpack({10, 20, 30})
+  assert(u1 == 10 and u2 == 20 and u3 == 30)
+  assert(select("#", unpack({})) == 0)
+
+  -- loadstring
+  local f = assert(loadstring("return 42"))
+  assert(f() == 42)
+  local err
+  f, err = loadstring("syntax error ?!")
+  assert(f == nil and type(err) == "string")
+
+  -- table.maxn
+  assert(table.maxn({[1]=1, [5]=2, [3]=3}) == 5)
+  assert(table.maxn({}) == 0)
+
+  -- getfenv / setfenv
+  local function make_sibling_funcs()
+    local function f1() return x end
+    local function f2() return x end
+    return f1, f2
+  end
+  local f1, f2 = make_sibling_funcs()
+  assert(getfenv(f1) == _G)
+  setfenv(f1, {x = "isolated_f1"})
+  setfenv(f2, {x = "isolated_f2"})
+  assert(f1() == "isolated_f1")
+  assert(f2() == "isolated_f2")
+  assert(getfenv(f1).x == "isolated_f1")
+  assert(getfenv(f2).x == "isolated_f2")
+  assert(getfenv(0) == _G)
+
+  -- bit module
+  assert(type(bit) == "table" and type(require("bit")) == "table")
+  assert(bit.tobit(0xffffffff) == -1)
+  assert(bit.tobit(0x123456789abcdef0LL) == -1698898192)
+  assert(bit.tobit(3.5) == 4)
+  assert(bit.tobit(2.5) == 2)
+  assert(bit.tobit(-1.5) == -2)
+  assert(bit.tobit(-2.5) == -2)
+  assert(bit.tohex(0x1234) == "00001234")
+  assert(bit.tohex(0x1234, -4) == "1234")
+  assert(bit.bnot(0) == -1)
+  assert(bit.band(0x12, 0x34) == 16)
+  assert(bit.bor(0x12, 0x34) == 54)
+  assert(bit.bxor(0x12, 0x34) == 38)
+  assert(bit.lshift(1, 4) == 16)
+  assert(bit.rshift(-1, 1) == 2147483647)
+  assert(bit.arshift(-1, 1) == -1)
+  assert(bit.rol(1, 4) == 16)
+  assert(bit.ror(16, 4) == 1)
+  assert(bit.bswap(0x12345678) == 0x78563412)
+
+  -- jit module
+  assert(type(jit) == "table" and type(require("jit")) == "table")
+  assert(type(jit.os) == "string")
+  assert(type(jit.arch) == "string")
+  assert(jit.version_num == 20100)
+  assert(jit.status() == false)
+  jit.on(); jit.off(); jit.flush()
+  jit.opt.start()
+end
+
 print('OK')
 
 return res

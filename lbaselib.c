@@ -406,6 +406,109 @@ static int luaB_load (lua_State *L) {
   return load_aux(L, status, env);
 }
 
+
+static int luaB_loadstring (lua_State *L) {
+  size_t l;
+  const char *s = luaL_checklstring(L, 1, &l);
+  const char *chunkname = luaL_optstring(L, 2, s);
+  int status = luaL_loadbuffer(L, s, l, chunkname);
+  return load_aux(L, status, 0);
+}
+
+
+static int luaB_unpack (lua_State *L) {
+  lua_Unsigned n;
+  lua_Integer len = (lua_Integer)lua_rawlen(L, 1);
+  lua_Integer i = luaL_optinteger(L, 2, 1);
+  lua_Integer e = luaL_opt(L, luaL_checkinteger, 3, len);
+  if (i > e) return 0;
+  n = l_castS2U(e) - l_castS2U(i);
+  if (l_unlikely(n >= (unsigned int)INT_MAX || !lua_checkstack(L, (int)(++n))))
+    return luaL_error(L, "too many results to unpack");
+  for (; i < e; i++) {
+    lua_rawgeti(L, 1, i);
+  }
+  lua_rawgeti(L, 1, e);
+  return (int)n;
+}
+
+
+static int luaB_getfenv (lua_State *L) {
+  lua_Debug ar;
+  if (lua_isnoneornil(L, 1)) {
+    if (lua_getstack(L, 1, &ar)) {
+      lua_getinfo(L, "f", &ar);
+      lua_getfenv(L, -1);
+      return 1;
+    }
+    lua_pushglobaltable(L);
+    return 1;
+  }
+  if (lua_type(L, 1) == LUA_TNUMBER) {
+    int level = (int)luaL_checkinteger(L, 1);
+    if (level == 0) {
+      lua_pushglobaltable(L);
+      return 1;
+    }
+    if (!lua_getstack(L, level, &ar))
+      return luaL_error(L, "bad argument #1 to 'getfenv' (invalid level)");
+    lua_getinfo(L, "f", &ar);
+    lua_replace(L, 1);
+  }
+  luaL_checkany(L, 1);
+  lua_getfenv(L, 1);
+  return 1;
+}
+
+
+static int luaB_setfenv (lua_State *L) {
+  int t;
+  lua_Debug ar;
+  luaL_checktype(L, 2, LUA_TTABLE);
+  if (lua_type(L, 1) == LUA_TNUMBER) {
+    int level = (int)luaL_checkinteger(L, 1);
+    if (level == 0) {
+      lua_pushvalue(L, 2);
+      return 0;
+    }
+    if (!lua_getstack(L, level, &ar))
+      return luaL_error(L, "bad argument #1 to 'setfenv' (invalid level)");
+    lua_getinfo(L, "f", &ar);
+    lua_replace(L, 1);
+  }
+  luaL_checkany(L, 1);
+  t = lua_type(L, 1);
+  if (t == LUA_TUSERDATA) {
+    lua_pushvalue(L, 2);
+    lua_setfenv(L, 1);
+    lua_pushvalue(L, 1);
+    return 1;
+  }
+  if (t == LUA_TFUNCTION) {
+    int i = 1;
+    const char *name;
+    while ((name = lua_getupvalue(L, 1, i)) != NULL) {
+      lua_pop(L, 1);
+      if (strcmp(name, "_ENV") == 0) {
+        /* Detach _ENV to a fresh upvalue before setting */
+        luaL_loadstring(L, "local env return function() return env end");
+        lua_call(L, 0, 1);
+        lua_upvaluejoin(L, 1, i, -1, 1);
+        lua_pop(L, 1);
+        /* Set new env */
+        lua_pushvalue(L, 2);
+        lua_setupvalue(L, 1, i);
+        lua_pushvalue(L, 1);
+        return 1;
+      }
+      i++;
+    }
+    lua_pushvalue(L, 1);
+    return 1;
+  }
+  return luaL_error(L, "bad argument #1 to 'setfenv' (function or userdata expected)");
+}
+
 /* }====================================================== */
 
 
@@ -511,10 +614,12 @@ static const luaL_Reg base_funcs[] = {
   {"collectgarbage", luaB_collectgarbage},
   {"dofile", luaB_dofile},
   {"error", luaB_error},
+  {"getfenv", luaB_getfenv},
   {"getmetatable", luaB_getmetatable},
   {"ipairs", luaB_ipairs},
   {"loadfile", luaB_loadfile},
   {"load", luaB_load},
+  {"loadstring", luaB_loadstring},
   {"next", luaB_next},
   {"pairs", luaB_pairs},
   {"pcall", luaB_pcall},
@@ -525,10 +630,12 @@ static const luaL_Reg base_funcs[] = {
   {"rawget", luaB_rawget},
   {"rawset", luaB_rawset},
   {"select", luaB_select},
+  {"setfenv", luaB_setfenv},
   {"setmetatable", luaB_setmetatable},
   {"tonumber", luaB_tonumber},
   {"tostring", luaB_tostring},
   {"type", luaB_type},
+  {"unpack", luaB_unpack},
   {"xpcall", luaB_xpcall},
   /* placeholders */
   {LUA_GNAME, NULL},

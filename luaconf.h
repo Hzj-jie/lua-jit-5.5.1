@@ -353,6 +353,7 @@
 ** nevertheless they are still available here.)
 */
 /* #define LUA_COMPAT_MATHLIB */
+#define LUA_COMPAT_MATHLIB
 
 
 /*

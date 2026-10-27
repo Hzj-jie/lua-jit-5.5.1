@@ -1173,5 +1173,15 @@ do
   assert(load("return 1e2ULL") == nil)
 end
 
+do
+  -- LUA_COMPAT_MATHLIB
+  assert(math.atan2(0, -1) == math.pi)
+  assert(math.pow(2, 8) == 256)
+  assert(math.log10(1000) == 3)
+  assert(math.cosh(0) == 1)
+  assert(math.sinh(0) == 0)
+  assert(math.tanh(0) == 0)
+end
+
 
 print('OK')
