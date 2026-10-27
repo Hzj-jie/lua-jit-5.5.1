@@ -600,9 +600,9 @@ assert(debug.getupvalue(string.gmatch("x", "x"), 1) == "")
 -- testing count hooks
 local a=0
 debug.sethook(function (e) a=a+1 end, "", 1)
-a=0; for i=1,1000 do end; assert(1000 < a and a < 1012)
+a=0; for i=1,1000 do end; assert(2000 < a and a < 2015)
 debug.sethook(function (e) a=a+1 end, "", 4)
-a=0; for i=1,1000 do end; assert(250 < a and a < 255)
+a=0; for i=1,1000 do end; assert(500 < a and a < 505)
 local f,m,c = debug.gethook()
 assert(m == "" and c == 4)
 debug.sethook(function (e) a=a+1 end, "", 4000)

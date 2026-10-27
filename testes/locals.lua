@@ -220,6 +220,58 @@ do   print("testing local constants")
 end
 
 
+do
+  -- mutable for-loop control variables (Lua 5.1 compatibility)
+  -- 1. Integer for-loop
+  local count = 0
+  for i = 1, 3 do
+    count = count + 1
+    i = "string" -- mutation should not break iteration or type-confuse OP_FORLOOP
+  end
+  assert(count == 3)
+
+  count = 0
+  for i = 1, 5, 2 do
+    count = count + 1
+    i = i + 10 -- mutation should not affect step or counter
+  end
+  assert(count == 3)
+
+  -- 2. Float for-loop
+  count = 0
+  for i = 1.0, 3.0, 1.0 do
+    count = count + 1
+    i = {} -- mutation with table
+  end
+  assert(count == 3)
+
+  -- 3. Generic for-loop (pairs / ipairs)
+  local t = { a = 1, b = 2, c = 3 }
+  local seen = {}
+  for k, v in pairs(t) do
+    seen[k] = v
+    k = nil -- mutation with nil should not prematurely end or restart iteration
+    v = nil
+  end
+  assert(seen.a == 1 and seen.b == 2 and seen.c == 3)
+
+  -- 4. Single-variable generic for-loop
+  local keys = {}
+  for k in pairs(t) do
+    keys[k] = true
+    k = 999
+  end
+  assert(keys.a and keys.b and keys.c)
+
+  -- 5. Closure capturing mutated loop variable
+  local fns = {}
+  for i = 1, 3 do
+    i = i * 10
+    fns[#fns + 1] = function () return i end
+  end
+  assert(fns[1]() == 10 and fns[2]() == 20 and fns[3]() == 30)
+end
+
 
 print"testing to-be-closed variables"
 

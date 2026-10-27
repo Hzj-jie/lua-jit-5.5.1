@@ -734,12 +734,12 @@ do
   a = 0; for i=1.0, 0.99999, -1 do a=a+1 end; assert(a==1)
 end
 
-do   -- attempt to change the control variable
+do   -- allow changing the control variable (Lua 5.1 compatibility)
   local st, msg = load "for i = 1, 10 do i = 10 end"
-  assert(not st and string.find(msg, "assign to const variable 'i'"))
+  assert(st and not msg)
 
   local st, msg = load "for v, k in pairs{} do v = 10 end"
-  assert(not st and string.find(msg, "assign to const variable 'v'"))
+  assert(st and not msg)
 end
 
 -- conversion
