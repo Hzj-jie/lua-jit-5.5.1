@@ -899,6 +899,13 @@ if not _port then
   assert(type(os.date("%Ex")) == 'string')
   assert(type(os.date("%Oy")) == 'string')
 
+  -- test glibc format flags
+  local t_flags = os.time{year = 2026, month = 10, day = 7, hour = 9, min = 5, sec = 1}
+  assert(os.date("%-I", t_flags) == "9")
+  assert(os.date("%_H", t_flags) == " 9")
+  assert(os.date("%-d", t_flags) == "7")
+  assert(os.date("%0d", t_flags) == "07")
+
   -- test large dates (assume at least 4-byte ints and time_t)
   local t0 = os.time{year = 1970, month = 1, day = 0}
   local t1 = os.time{year = 1970, month = 1, day = 0, sec = (1 << 31) - 1}

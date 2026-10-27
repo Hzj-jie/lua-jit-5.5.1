@@ -278,6 +278,17 @@ static const char *checkoption (lua_State *L, const char *conv,
                                 size_t convlen, char *buff) {
   const char *option = LUA_STRFTIMEOPTIONS;
   unsigned oplen = 1;  /* length of options being checked */
+  if (convlen >= 2 && strchr("-_0^#", *conv) != NULL) {
+    for (; *option != '\0' && *option != '|'; option++) {
+      if (conv[1] == *option) {
+        buff[0] = conv[0];
+        buff[1] = conv[1];
+        buff[2] = '\0';
+        return conv + 2;
+      }
+    }
+    option = LUA_STRFTIMEOPTIONS;
+  }
   for (; *option != '\0' && oplen <= convlen; option += oplen) {
     if (*option == '|')  /* next block? */
       oplen++;  /* will check options with next length (+1) */
@@ -324,7 +335,7 @@ static int os_date (lua_State *L) {
     setallfields(L, stm);
   }
   else {
-    char cc[4];  /* buffer for individual conversion specifiers */
+    char cc[5];  /* buffer for individual conversion specifiers */
     luaL_Buffer b;
     cc[0] = '%';
     luaL_buffinit(L, &b);
