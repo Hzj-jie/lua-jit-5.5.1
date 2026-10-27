@@ -45,10 +45,10 @@ const char lua_ident[] =
 
 
 /* test for pseudo index */
-#define ispseudo(i)		((i) <= LUA_REGISTRYINDEX)
+#define ispseudo(i)		((i) <= LUA_REGISTRYINDEX || ((i) <= -10000 && (i) >= -10002 - MAXUPVAL))
 
 /* test for upvalue */
-#define isupvalue(i)		((i) < LUA_REGISTRYINDEX)
+#define isupvalue(i)		((i) < LUA_REGISTRYINDEX || ((i) <= -10003 && (i) >= -10002 - MAXUPVAL))
 
 
 /*
@@ -63,6 +63,18 @@ static TValue *index2value (lua_State *L, int idx) {
     if (o >= L->top.p) return &G(L)->nilvalue;
     else return s2v(o);
   }
+  else if (idx == -10000)
+    return &G(L)->l_registry;
+  else if (idx == -10001) {
+    luaG_runerror(L, "LUA_ENVIRONINDEX (-10001) is not supported");
+    return &G(L)->nilvalue;
+  }
+  else if (idx == -10002)
+    return &G(L)->l_globals;
+  else if (idx <= -10003 && idx >= -10002 - MAXUPVAL) {
+    idx = LUA_REGISTRYINDEX - (-10002 - idx);
+    goto handle_upvalue;
+  }
   else if (!ispseudo(idx)) {  /* negative index */
     api_check(L, idx != 0 && -idx <= L->top.p - (ci->func.p + 1),
                  "invalid index");
@@ -71,6 +83,7 @@ static TValue *index2value (lua_State *L, int idx) {
   else if (idx == LUA_REGISTRYINDEX)
     return &G(L)->l_registry;
   else {  /* upvalues */
+handle_upvalue:
     idx = LUA_REGISTRYINDEX - idx;
     api_check(L, idx <= MAXUPVAL + 1, "upvalue index too large");
     if (ttisCclosure(s2v(ci->func.p))) {  /* C closure? */
@@ -253,6 +266,8 @@ LUA_API void lua_rotate (lua_State *L, int idx, int n) {
 LUA_API void lua_copy (lua_State *L, int fromidx, int toidx) {
   TValue *fr, *to;
   lua_lock(L);
+  if (l_unlikely(toidx == -10001 || toidx == -10002))
+    luaG_runerror(L, "cannot replace special pseudo-index");
   fr = index2value(L, fromidx);
   to = index2value(L, toidx);
   api_check(L, isvalid(L, to), "invalid index");
@@ -1474,6 +1489,120 @@ LUA_API void lua_upvaluejoin (lua_State *L, int fidx1, int n1,
   api_check(L, *up1 != NULL && *up2 != NULL, "invalid upvalue index");
   *up1 = *up2;
   luaC_objbarrier(L, f1, *up1);
+}
+
+
+#undef lua_call
+LUA_API void lua_call (lua_State *L, int nargs, int nresults) {
+  lua_callk(L, nargs, nresults, 0, NULL);
+}
+
+#undef lua_pcall
+LUA_API int lua_pcall (lua_State *L, int nargs, int nresults, int errfunc) {
+  return lua_pcallk(L, nargs, nresults, errfunc, 0, NULL);
+}
+
+#undef lua_equal
+LUA_API int lua_equal (lua_State *L, int idx1, int idx2) {
+  return lua_compare(L, idx1, idx2, LUA_OPEQ);
+}
+
+LUA_API void lua_getfenv (lua_State *L, int idx) {
+  int t = lua_type(L, idx);
+  if (t == LUA_TUSERDATA) {
+    if (lua_getiuservalue(L, idx, 1) != LUA_TTABLE) {
+      lua_pop(L, 1);
+      lua_pushglobaltable(L);
+    }
+  }
+  else if (t == LUA_TFUNCTION) {
+    int i = 1;
+    const char *name;
+    while ((name = lua_getupvalue(L, idx, i)) != NULL) {
+      if (strcmp(name, "_ENV") == 0)
+        return;
+      lua_pop(L, 1);
+      i++;
+    }
+    lua_pushglobaltable(L);
+  }
+  else {
+    lua_pushglobaltable(L);
+  }
+}
+
+LUA_API int lua_setfenv (lua_State *L, int idx) {
+  int t = lua_type(L, idx);
+  int res = 0;
+  if (t == LUA_TUSERDATA) {
+    res = lua_setiuservalue(L, idx, 1);
+  }
+  else {
+    lua_pop(L, 1); /* pop new env */
+  }
+  return res;
+}
+
+#undef lua_insert
+LUA_API void lua_insert (lua_State *L, int idx) {
+  lua_rotate(L, idx, 1);
+}
+
+#undef lua_remove
+LUA_API void lua_remove (lua_State *L, int idx) {
+  lua_rotate(L, idx, -1);
+  lua_pop(L, 1);
+}
+
+#undef lua_replace
+LUA_API void lua_replace (lua_State *L, int idx) {
+  lua_copy(L, -1, idx);
+  lua_pop(L, 1);
+}
+
+#undef lua_newuserdata
+LUA_API void *lua_newuserdata (lua_State *L, size_t size) {
+  void *ud = lua_newuserdatauv(L, size, 1);
+  lua_pushglobaltable(L);
+  lua_setiuservalue(L, -2, 1);
+  return ud;
+}
+
+#undef lua_objlen
+LUA_API size_t lua_objlen (lua_State *L, int idx) {
+  return lua_rawlen(L, idx);
+}
+
+#undef lua_tonumber
+LUA_API lua_Number lua_tonumber (lua_State *L, int idx) {
+  return lua_tonumberx(L, idx, NULL);
+}
+
+#undef lua_tointeger
+LUA_API ptrdiff_t lua_tointeger (lua_State *L, int idx) {
+  int isnum;
+  lua_Integer res = lua55_tointegerx(L, idx, &isnum);
+  if (!isnum) {
+    lua_Number n = lua_tonumberx(L, idx, &isnum);
+    if (isnum && lua_numbertointeger(n, &res))
+      return (ptrdiff_t)res;
+  }
+  return (ptrdiff_t)res;
+}
+
+#undef lua_pushinteger
+LUA_API void lua_pushinteger (lua_State *L, ptrdiff_t n) {
+  lua55_pushinteger(L, (lua_Integer)n);
+}
+
+#undef lua_rawgeti
+LUA_API int lua_rawgeti (lua_State *L, int idx, int n) {
+  return lua55_rawgeti(L, idx, (lua_Integer)n);
+}
+
+#undef lua_rawseti
+LUA_API void lua_rawseti (lua_State *L, int idx, int n) {
+  lua55_rawseti(L, idx, (lua_Integer)n);
 }
 
 

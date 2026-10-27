@@ -202,6 +202,7 @@ static void init_registry (lua_State *L, global_State *g) {
   luaH_setint(L, registry, LUA_RIDX_MAINTHREAD, &aux);
   /* registry[LUA_RIDX_GLOBALS] = new table (table of globals) */
   sethvalue(L, &aux, luaH_new(L));
+  setobj(L, &g->l_globals, &aux);
   luaH_setint(L, registry, LUA_RIDX_GLOBALS, &aux);
 }
 
@@ -361,6 +362,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud, unsigned seed) {
   g->strt.size = g->strt.nuse = 0;
   g->strt.hash = NULL;
   setnilvalue(&g->l_registry);
+  setnilvalue(&g->l_globals);
   g->panic = NULL;
   g->gcstate = GCSpause;
   g->gckind = KGC_INC;

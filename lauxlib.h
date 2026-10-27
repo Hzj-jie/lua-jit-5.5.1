@@ -52,6 +52,9 @@ LUALIB_API int (luaL_callmeta) (lua_State *L, int obj, const char *e);
 LUALIB_API const char *(luaL_tolstring) (lua_State *L, int idx, size_t *len);
 LUALIB_API int (luaL_argerror) (lua_State *L, int arg, const char *extramsg);
 LUALIB_API int (luaL_typeerror) (lua_State *L, int arg, const char *tname);
+LUALIB_API int (luaL_typerror) (lua_State *L, int arg, const char *tname);
+LUALIB_API void (luaL_register) (lua_State *L, const char *libname,
+                                const luaL_Reg *l);
 LUALIB_API const char *(luaL_checklstring) (lua_State *L, int arg,
                                                           size_t *l);
 LUALIB_API const char *(luaL_optlstring) (lua_State *L, int arg,
@@ -59,9 +62,14 @@ LUALIB_API const char *(luaL_optlstring) (lua_State *L, int arg,
 LUALIB_API lua_Number (luaL_checknumber) (lua_State *L, int arg);
 LUALIB_API lua_Number (luaL_optnumber) (lua_State *L, int arg, lua_Number def);
 
-LUALIB_API lua_Integer (luaL_checkinteger) (lua_State *L, int arg);
-LUALIB_API lua_Integer (luaL_optinteger) (lua_State *L, int arg,
+LUALIB_API lua_Integer (lua55_L_checkinteger) (lua_State *L, int arg);
+LUALIB_API lua_Integer (lua55_L_optinteger) (lua_State *L, int arg,
                                           lua_Integer def);
+LUALIB_API ptrdiff_t   (luaL_checkinteger) (lua_State *L, int arg);
+LUALIB_API ptrdiff_t   (luaL_optinteger) (lua_State *L, int arg,
+                                          ptrdiff_t def);
+#define luaL_checkinteger	lua55_L_checkinteger
+#define luaL_optinteger		lua55_L_optinteger
 
 LUALIB_API void (luaL_checkstack) (lua_State *L, int sz, const char *msg);
 LUALIB_API void (luaL_checktype) (lua_State *L, int arg, int t);

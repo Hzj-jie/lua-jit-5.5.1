@@ -281,6 +281,10 @@ else
   f = assert(package.loadlib(DC"lib1", p.."anotherfunc"))
   assert(f(10, 20) == "10%20\n")
 
+  -- test 5.1 C ABI and pseudo-indices
+  local f_c_abi = assert(package.loadlib(DC"lib1", p.."test_c_abi"))
+  assert(f_c_abi() == true)
+
   -- check error messages
   local f, err, when = package.loadlib(DC"lib1", p.."xuxu")
   assert(not f and type(err) == "string" and when == "init")

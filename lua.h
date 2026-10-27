@@ -43,6 +43,10 @@
 #define LUA_REGISTRYINDEX	(-(INT_MAX/2 + 1000))
 #define lua_upvalueindex(i)	(LUA_REGISTRYINDEX - (i))
 
+/* Lua 5.1 pseudo-indices compatibility */
+#define LUA_ENVIRONINDEX	(-10001)
+#define LUA_GLOBALSINDEX	(-10002)
+
 
 /* thread status */
 #define LUA_OK		0
@@ -198,7 +202,9 @@ LUA_API int             (lua_type) (lua_State *L, int idx);
 LUA_API const char     *(lua_typename) (lua_State *L, int tp);
 
 LUA_API lua_Number      (lua_tonumberx) (lua_State *L, int idx, int *isnum);
-LUA_API lua_Integer     (lua_tointegerx) (lua_State *L, int idx, int *isnum);
+LUA_API lua_Integer     (lua55_tointegerx) (lua_State *L, int idx, int *isnum);
+LUA_API ptrdiff_t       (lua_tointeger) (lua_State *L, int idx);
+#define lua_tointegerx	lua55_tointegerx
 LUA_API int             (lua_toboolean) (lua_State *L, int idx);
 LUA_API const char     *(lua_tolstring) (lua_State *L, int idx, size_t *len);
 LUA_API lua_Unsigned    (lua_rawlen) (lua_State *L, int idx);
@@ -242,7 +248,9 @@ LUA_API int   (lua_compare) (lua_State *L, int idx1, int idx2, int op);
 */
 LUA_API void        (lua_pushnil) (lua_State *L);
 LUA_API void        (lua_pushnumber) (lua_State *L, lua_Number n);
-LUA_API void        (lua_pushinteger) (lua_State *L, lua_Integer n);
+LUA_API void        (lua55_pushinteger) (lua_State *L, lua_Integer n);
+LUA_API void        (lua_pushinteger) (lua_State *L, ptrdiff_t n);
+#define lua_pushinteger	lua55_pushinteger
 LUA_API const char *(lua_pushlstring) (lua_State *L, const char *s, size_t len);
 LUA_API const char *(lua_pushexternalstring) (lua_State *L,
 		const char *s, size_t len, lua_Alloc falloc, void *ud);
@@ -264,7 +272,9 @@ LUA_API int (lua_gettable) (lua_State *L, int idx);
 LUA_API int (lua_getfield) (lua_State *L, int idx, const char *k);
 LUA_API int (lua_geti) (lua_State *L, int idx, lua_Integer n);
 LUA_API int (lua_rawget) (lua_State *L, int idx);
-LUA_API int (lua_rawgeti) (lua_State *L, int idx, lua_Integer n);
+LUA_API int (lua55_rawgeti) (lua_State *L, int idx, lua_Integer n);
+LUA_API int (lua_rawgeti) (lua_State *L, int idx, int n);
+#define lua_rawgeti	lua55_rawgeti
 LUA_API int (lua_rawgetp) (lua_State *L, int idx, const void *p);
 
 LUA_API void  (lua_createtable) (lua_State *L, int narr, int nrec);
@@ -281,7 +291,9 @@ LUA_API void  (lua_settable) (lua_State *L, int idx);
 LUA_API void  (lua_setfield) (lua_State *L, int idx, const char *k);
 LUA_API void  (lua_seti) (lua_State *L, int idx, lua_Integer n);
 LUA_API void  (lua_rawset) (lua_State *L, int idx);
-LUA_API void  (lua_rawseti) (lua_State *L, int idx, lua_Integer n);
+LUA_API void  (lua55_rawseti) (lua_State *L, int idx, lua_Integer n);
+LUA_API void  (lua_rawseti) (lua_State *L, int idx, int n);
+#define lua_rawseti	lua55_rawseti
 LUA_API void  (lua_rawsetp) (lua_State *L, int idx, const void *p);
 LUA_API int   (lua_setmetatable) (lua_State *L, int objindex);
 LUA_API int   (lua_setiuservalue) (lua_State *L, int idx, int n);
@@ -292,11 +304,13 @@ LUA_API int   (lua_setiuservalue) (lua_State *L, int idx, int n);
 */
 LUA_API void  (lua_callk) (lua_State *L, int nargs, int nresults,
                            lua_KContext ctx, lua_KFunction k);
-#define lua_call(L,n,r)		lua_callk(L, (n), (r), 0, NULL)
+LUA_API void  (lua_call) (lua_State *L, int nargs, int nresults);
+#define lua_call(L,n,r)		((lua_call)(L, (n), (r)))
 
 LUA_API int   (lua_pcallk) (lua_State *L, int nargs, int nresults, int errfunc,
                             lua_KContext ctx, lua_KFunction k);
-#define lua_pcall(L,n,r,f)	lua_pcallk(L, (n), (r), (f), 0, NULL)
+LUA_API int   (lua_pcall) (lua_State *L, int nargs, int nresults, int errfunc);
+#define lua_pcall(L,n,r,f)	((lua_pcall)(L, (n), (r), (f)))
 
 LUA_API int   (lua_load) (lua_State *L, lua_Reader reader, void *dt,
                           const char *chunkname, const char *mode);
@@ -390,8 +404,9 @@ LUA_API void (lua_closeslot) (lua_State *L, int idx);
 
 #define lua_getextraspace(L)	((void *)((char *)(L) - LUA_EXTRASPACE))
 
-#define lua_tonumber(L,i)	lua_tonumberx(L,(i),NULL)
-#define lua_tointeger(L,i)	lua_tointegerx(L,(i),NULL)
+LUA_API lua_Number (lua_tonumber) (lua_State *L, int idx);
+#define lua_tonumber(L,i)	((lua_tonumber)(L,(i)))
+#define lua_tointeger(L,i)	lua55_tointegerx(L,(i),NULL)
 
 #define lua_pop(L,n)		lua_settop(L, -(n)-1)
 
@@ -418,11 +433,12 @@ LUA_API void (lua_closeslot) (lua_State *L, int idx);
 #define lua_tostring(L,i)	lua_tolstring(L, (i), NULL)
 
 
-#define lua_insert(L,idx)	lua_rotate(L, (idx), 1)
-
-#define lua_remove(L,idx)	(lua_rotate(L, (idx), -1), lua_pop(L, 1))
-
-#define lua_replace(L,idx)	(lua_copy(L, -1, (idx)), lua_pop(L, 1))
+LUA_API void  (lua_insert) (lua_State *L, int idx);
+LUA_API void  (lua_remove) (lua_State *L, int idx);
+LUA_API void  (lua_replace) (lua_State *L, int idx);
+#define lua_insert(L,idx)	((lua_insert)(L, (idx)))
+#define lua_remove(L,idx)	((lua_remove)(L, (idx)))
+#define lua_replace(L,idx)	((lua_replace)(L, (idx)))
 
 /* }============================================================== */
 
@@ -433,11 +449,17 @@ LUA_API void (lua_closeslot) (lua_State *L, int idx);
 ** ===============================================================
 */
 
-#define lua_newuserdata(L,s)	lua_newuserdatauv(L,s,1)
+LUA_API void *(lua_newuserdata) (lua_State *L, size_t sz);
+#define lua_newuserdata(L,s)	((lua_newuserdata)(L,(s)))
 #define lua_getuservalue(L,idx)	lua_getiuservalue(L,idx,1)
 #define lua_setuservalue(L,idx)	lua_setiuservalue(L,idx,1)
 
 #define lua_resetthread(L)	lua_closethread(L,NULL)
+
+LUA_API int   (lua_equal) (lua_State *L, int idx1, int idx2);
+LUA_API void  (lua_getfenv) (lua_State *L, int idx);
+LUA_API int   (lua_setfenv) (lua_State *L, int idx);
+LUA_API size_t (lua_objlen) (lua_State *L, int idx);
 
 /* }============================================================== */
 

@@ -208,6 +208,60 @@ LUALIB_API int luaL_typeerror (lua_State *L, int arg, const char *tname) {
 }
 
 
+LUALIB_API int luaL_typerror (lua_State *L, int arg, const char *tname) {
+  return luaL_typeerror(L, arg, tname);
+}
+
+
+static const char *luaL_findtable_helper (lua_State *L, int idx,
+                                         const char *fname, int szhint) {
+  const char *e;
+  lua_pushvalue(L, idx);
+  do {
+    e = strchr(fname, '.');
+    if (e == NULL) e = fname + strlen(fname);
+    lua_pushlstring(L, fname, ct_diff2sz(e - fname));
+    if (lua_rawget(L, -2) == LUA_TNIL) {  /* no such field? */
+      lua_pop(L, 1);  /* remove this nil */
+      lua_createtable(L, 0, (*e == '.' ? 1 : szhint)); /* new table for field */
+      lua_pushlstring(L, fname, ct_diff2sz(e - fname));
+      lua_pushvalue(L, -2);
+      lua_settable(L, -4);  /* set new table into field */
+    }
+    else if (!lua_istable(L, -1)) {  /* field has a non-table value? */
+      lua_pop(L, 2);  /* remove table and value */
+      return fname;  /* return problematic part of the name */
+    }
+    lua_remove(L, -2);  /* remove previous table */
+    fname = e + 1;
+  } while (*e == '.');
+  return NULL;
+}
+
+
+LUALIB_API void luaL_register (lua_State *L, const char *libname,
+                               const luaL_Reg *l) {
+  if (libname) {
+    /* check whether lib already exists in _LOADED */
+    lua_getfield(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+    lua_getfield(L, -1, libname);  /* get _LOADED[libname] */
+    if (!lua_istable(L, -1)) {  /* not found? */
+      lua_pop(L, 1);  /* remove previous result */
+      /* try global variable (and create one if it does not exist) */
+      lua_pushglobaltable(L);
+      if (luaL_findtable_helper(L, -1, libname, l ? 8 : 0) != NULL)
+        luaL_error(L, "name conflict for module '%s'", libname);
+      lua_remove(L, -2);  /* remove global table */
+      lua_pushvalue(L, -1);
+      lua_setfield(L, -3, libname);  /* _LOADED[libname] = new table */
+    }
+    lua_remove(L, -2);  /* remove _LOADED table */
+  }
+  if (l)
+    luaL_setfuncs(L, l, 0);
+}
+
+
 static void tag_error (lua_State *L, int arg, int tag) {
   luaL_typeerror(L, arg, lua_typename(L, tag));
 }
@@ -1214,5 +1268,16 @@ LUALIB_API void luaL_checkversion_ (lua_State *L, lua_Number ver, size_t sz) {
   else if (v != ver)
     luaL_error(L, "version mismatch: app. needs %f, Lua core provides %f",
                   (LUAI_UACNUMBER)ver, (LUAI_UACNUMBER)v);
+}
+
+
+#undef luaL_checkinteger
+LUALIB_API ptrdiff_t luaL_checkinteger (lua_State *L, int arg) {
+  return (ptrdiff_t)lua55_L_checkinteger(L, arg);
+}
+
+#undef luaL_optinteger
+LUALIB_API ptrdiff_t luaL_optinteger (lua_State *L, int arg, ptrdiff_t def) {
+  return (ptrdiff_t)lua55_L_optinteger(L, arg, (lua_Integer)def);
 }
 

@@ -333,6 +333,7 @@ typedef struct global_State {
   l_mem GCmajorminor;  /* auxiliary counter to control major-minor shifts */
   stringtable strt;  /* hash table for strings */
   TValue l_registry;
+  TValue l_globals;
   TValue nilvalue;  /* a nil value */
   unsigned int seed;  /* randomized seed for hashes */
   lu_byte gcparams[LUA_GCPN];
