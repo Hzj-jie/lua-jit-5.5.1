@@ -1059,7 +1059,7 @@ assert(not pcall(random, maxint, minint))
 
 
 --
--- [[==================================================================
+--[==[
     print("testing precision of 'tostring'")
 -- -===================================================================
 --
@@ -1139,7 +1139,19 @@ do
   end
 
 end
--- ]]==================================================================
+--]==]
+
+do
+  -- LuaJIT float formatting and integer coercion
+  assert(tostring(1.0) == "1")
+  assert(tostring(0.1 + 0.2) == "0.3")
+  assert(string.format("%d", 2.9) == "2")
+  assert(string.format("%d", -2.9) == "-2")
+  assert(string.format("%x", 15.5) == "f")
+  assert(math.tointeger(1.0) == 1)
+  assert(not pcall(string.format, "%d", 2^63))
+  assert(not pcall(string.format, "%d", -2^64))
+end
 
 do
   -- LuaJIT LL / ULL literal suffixes

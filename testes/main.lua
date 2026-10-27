@@ -244,7 +244,7 @@ checkout("1\n2\n15\n2\n15\n")
 -- test explicit global names in -l
 prepfile("print(str.upper'alo alo', m.max(10, 20))")
 RUN("lua -l 'str=string' '-lm=math' -e 'print(m.sin(0))' %s > %s", prog, out)
-checkout("0.0\nALO ALO\t20\n")
+checkout("0\nALO ALO\t20\n")
 
 
 -- test module names with version suffix ("libs/lib2-v2")

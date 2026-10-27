@@ -425,21 +425,8 @@ int luaO_utf8esc (char *buff, l_uint32 x) {
 ** its end.
 */
 static int tostringbuffFloat (lua_Number n, char *buff) {
-  /* first conversion */
-  int len = l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT,
-                            (LUAI_UACNUMBER)n);
-  lua_Number check = lua_str2number(buff, NULL);  /* read it back */
-  if (check != n) {  /* not enough precision? */
-    /* convert again with more precision */
-    len = l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT_N,
-                          (LUAI_UACNUMBER)n);
-  }
-  /* looks like an integer? */
-  if (buff[strspn(buff, "-0123456789")] == '\0') {
-    buff[len++] = lua_getlocaledecpoint();
-    buff[len++] = '0';  /* adds '.0' to result */
-  }
-  return len;
+  return l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT,
+                        (LUAI_UACNUMBER)n);
 }
 
 
