@@ -10,7 +10,9 @@
 #include "lprefix.h"
 
 
+#include <errno.h>
 #include <locale.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "lua.h"
@@ -245,6 +247,8 @@ static int read_numeral (LexState *ls, SemInfo *seminfo) {
   TValue obj;
   const char *expo = "Ee";
   int first = ls->current;
+  size_t num_len;
+  int has_suffix = 0;
   lua_assert(lisdigit(ls->current));
   save_and_next(ls);
   if (first == '0' && check_next2(ls, "xX"))  /* hexadecimal? */
@@ -256,9 +260,40 @@ static int read_numeral (LexState *ls, SemInfo *seminfo) {
       save_and_next(ls);
     else break;
   }
-  if (lislalpha(ls->current))  /* is numeral touching a letter? */
+  num_len = luaZ_bufflen(ls->buff);
+  if (check_next2(ls, "uU")) {
+    if (check_next2(ls, "lL")) {
+      if (check_next2(ls, "lL"))
+        has_suffix = 1;
+    }
+  }
+  else if (check_next2(ls, "lL")) {
+    if (check_next2(ls, "lL")) {
+      check_next2(ls, "uU");
+      has_suffix = 1;
+    }
+  }
+  if (lislalpha(ls->current)) { /* is numeral touching a letter? */
     save_and_next(ls);  /* force an error */
+    has_suffix = 0;
+  }
   save(ls, '\0');
+  if (has_suffix) {
+    char *endptr;
+    int base;
+    unsigned long long uval;
+    char *buf = luaZ_buffer(ls->buff);
+    buf[num_len] = '\0'; /* strip suffix */
+    if (strchr(buf, '.') != NULL || strpbrk(buf, expo) != NULL)
+      lexerror(ls, "malformed number", TK_FLT);
+    base = (first == '0' && (buf[1] == 'x' || buf[1] == 'X')) ? 16 : 10;
+    errno = 0;
+    uval = strtoull(buf, &endptr, base);
+    if (errno != 0 || endptr != buf + num_len || endptr == buf)
+      lexerror(ls, "malformed number", TK_FLT);
+    seminfo->i = (lua_Integer)(lua_Unsigned)uval;
+    return TK_INT;
+  }
   if (luaO_str2num(luaZ_buffer(ls->buff), &obj) == 0)  /* format error? */
     lexerror(ls, "malformed number", TK_FLT);
   if (ttisinteger(&obj)) {

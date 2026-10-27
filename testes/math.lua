@@ -1141,5 +1141,25 @@ do
 end
 -- ]]==================================================================
 
+do
+  -- LuaJIT LL / ULL literal suffixes
+  assert(0LL == 0)
+  assert(math.type(0LL) == "integer")
+  assert(11644473600000000ULL == 11644473600000000)
+  assert(math.type(11644473600000000ULL) == "integer")
+  assert(0xFFFFFFFFFFFFFFFFULL == -1)
+  assert(math.type(0xFFFFFFFFFFFFFFFFULL) == "integer")
+  assert(18446744073709551615ULL == -1)
+  assert(math.type(18446744073709551615ULL) == "integer")
+  assert(0x10LLU == 16)
+  assert(10ll == 10)
+  assert(10ull == 10)
+  assert(10llu == 10)
+  assert(tonumber("10ULL") == nil)
+  assert(load("return 1.5ULL") == nil)
+  assert(load("return 10ULLL") == nil)
+  assert(load("return 1e2ULL") == nil)
+end
+
 
 print('OK')
