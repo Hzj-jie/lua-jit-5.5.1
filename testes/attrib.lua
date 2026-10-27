@@ -612,6 +612,47 @@ do
   assert(jit.status() == false)
   jit.on(); jit.off(); jit.flush()
   jit.opt.start()
+
+  -- string.buffer module
+  local buffer = require("string.buffer")
+  assert(type(buffer) == "table")
+  assert(string.buffer == buffer)
+  assert(type(buffer.encode) == "function")
+  assert(type(buffer.decode) == "function")
+  assert(buffer.decode(buffer.encode(nil)) == nil)
+  assert(buffer.decode(buffer.encode(true)) == true)
+  assert(buffer.decode(buffer.encode(false)) == false)
+  assert(buffer.decode(buffer.encode(1234567890)) == 1234567890)
+  assert(buffer.decode(buffer.encode(3.14)) == 3.14)
+  assert(buffer.decode(buffer.encode("hello\0world")) == "hello\0world")
+  local roundtrip = buffer.decode(buffer.encode({ a = 1, b = "two", c = { 3, 4 } }))
+  assert(roundtrip.a == 1 and roundtrip.b == "two" and roundtrip.c[1] == 3 and roundtrip.c[2] == 4)
+
+  -- 100-deep nested table round-trip
+  local deep100 = {}
+  local curr = deep100
+  for i = 1, 100 do
+    curr.next = {}
+    curr = curr.next
+  end
+  curr.val = "deep_val_100"
+  local dec100 = buffer.decode(buffer.encode(deep100))
+  local c = dec100
+  for i = 1, 100 do c = c.next end
+  assert(c.val == "deep_val_100")
+
+  -- depth > 256 error handling
+  local deep300 = {}
+  curr = deep300
+  for i = 1, 300 do
+    curr.next = {}
+    curr = curr.next
+  end
+  assert(not pcall(buffer.encode, deep300))
+
+  -- error on unsupported type leaving GC in clean state and subsequent encode succeeding
+  assert(not pcall(buffer.encode, { f = function() end }))
+  assert(buffer.decode(buffer.encode({ ok = 1 })).ok == 1)
 end
 
 print('OK')

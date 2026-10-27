@@ -56,6 +56,7 @@ LUAMOD_API int (luaopen_utf8) (lua_State *L);
 
 LUAMOD_API int (luaopen_bit) (lua_State *L);
 LUAMOD_API int (luaopen_jit) (lua_State *L);
+LUAMOD_API int (luaopen_string_buffer) (lua_State *L);
 
 
 /* open selected libraries */

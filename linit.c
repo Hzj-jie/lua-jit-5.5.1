@@ -264,6 +264,208 @@ LUAMOD_API int luaopen_jit (lua_State *L) {
 
 
 /*
+** LuaJIT-compatible 'string.buffer' module (encode/decode)
+*/
+
+typedef struct {
+  int boxidx;
+  size_t size;
+  size_t capacity;
+} EncBuffer;
+
+static void enc_write (lua_State *L, EncBuffer *b, const void *p, size_t n) {
+  if (b->size + n > b->capacity) {
+    size_t newcap = b->capacity == 0 ? 128 : b->capacity * 2;
+    char *olddata;
+    void *newdata;
+    while (newcap < b->size + n) newcap *= 2;
+    newdata = lua_newuserdatauv(L, newcap, 0);
+    olddata = (char *)lua_touserdata(L, b->boxidx);
+    if (b->size > 0 && olddata != NULL)
+      memcpy(newdata, olddata, b->size);
+    lua_replace(L, b->boxidx);
+    b->capacity = newcap;
+  }
+  memcpy((char *)lua_touserdata(L, b->boxidx) + b->size, p, n);
+  b->size += n;
+}
+
+static void enc_byte (lua_State *L, EncBuffer *b, uint8_t byte) {
+  enc_write(L, b, &byte, 1);
+}
+
+static void enc_val (lua_State *L, EncBuffer *b, int idx, int depth) {
+  int t;
+  luaL_checkstack(L, 3, "buffer overflow");
+  if (depth > 256)
+    luaL_error(L, "nesting too deep in string.buffer.encode");
+  idx = lua_absindex(L, idx);
+  t = lua_type(L, idx);
+  switch (t) {
+    case LUA_TNIL:
+      enc_byte(L, b, 0);
+      break;
+    case LUA_TBOOLEAN:
+      enc_byte(L, b, (uint8_t)(lua_toboolean(L, idx) ? 2 : 1));
+      break;
+    case LUA_TNUMBER: {
+      if (lua_isinteger(L, idx)) {
+        int64_t v = (int64_t)lua_tointeger(L, idx);
+        enc_byte(L, b, 3);
+        enc_write(L, b, &v, sizeof(v));
+      }
+      else {
+        double v = (double)lua_tonumber(L, idx);
+        enc_byte(L, b, 4);
+        enc_write(L, b, &v, sizeof(v));
+      }
+      break;
+    }
+    case LUA_TSTRING: {
+      size_t len;
+      const char *s = lua_tolstring(L, idx, &len);
+      uint32_t ulen = (uint32_t)len;
+      enc_byte(L, b, 5);
+      enc_write(L, b, &ulen, sizeof(ulen));
+      enc_write(L, b, s, len);
+      break;
+    }
+    case LUA_TTABLE: {
+      uint32_t count = 0;
+      lua_pushnil(L);
+      while (lua_next(L, idx)) {
+        count++;
+        lua_pop(L, 1);
+      }
+      enc_byte(L, b, 6);
+      enc_write(L, b, &count, sizeof(count));
+      lua_pushnil(L);
+      while (lua_next(L, idx)) {
+        enc_val(L, b, -2, depth + 1);
+        enc_val(L, b, -1, depth + 1);
+        lua_pop(L, 1);
+      }
+      break;
+    }
+    default:
+      luaL_error(L, "cannot encode %s", lua_typename(L, t));
+      break;
+  }
+}
+
+typedef struct {
+  const uint8_t *p;
+  const uint8_t *end;
+} DecBuffer;
+
+static void dec_read (lua_State *L, DecBuffer *d, void *dest, size_t n) {
+  if ((size_t)(d->end - d->p) < n)
+    luaL_error(L, "truncated buffer in string.buffer.decode");
+  memcpy(dest, d->p, n);
+  d->p += n;
+}
+
+static uint8_t dec_byte (lua_State *L, DecBuffer *d) {
+  uint8_t b;
+  dec_read(L, d, &b, 1);
+  return b;
+}
+
+static void dec_val (lua_State *L, DecBuffer *d, int depth) {
+  uint8_t tag;
+  luaL_checkstack(L, 3, "buffer overflow");
+  if (depth > 256)
+    luaL_error(L, "nesting too deep in string.buffer.decode");
+  tag = dec_byte(L, d);
+  switch (tag) {
+    case 0:
+      lua_pushnil(L);
+      break;
+    case 1:
+      lua_pushboolean(L, 0);
+      break;
+    case 2:
+      lua_pushboolean(L, 1);
+      break;
+    case 3: {
+      int64_t v;
+      dec_read(L, d, &v, sizeof(v));
+      lua_pushinteger(L, (lua_Integer)v);
+      break;
+    }
+    case 4: {
+      double v;
+      dec_read(L, d, &v, sizeof(v));
+      lua_pushnumber(L, (lua_Number)v);
+      break;
+    }
+    case 5: {
+      uint32_t len;
+      dec_read(L, d, &len, sizeof(len));
+      if ((size_t)(d->end - d->p) < (size_t)len)
+        luaL_error(L, "truncated string in string.buffer.decode");
+      lua_pushlstring(L, (const char *)d->p, (size_t)len);
+      d->p += len;
+      break;
+    }
+    case 6: {
+      uint32_t count, i;
+      dec_read(L, d, &count, sizeof(count));
+      lua_createtable(L, 0, (int)count);
+      for (i = 0; i < count; i++) {
+        dec_val(L, d, depth + 1); /* key */
+        dec_val(L, d, depth + 1); /* value */
+        lua_settable(L, -3);
+      }
+      break;
+    }
+    default:
+      luaL_error(L, "invalid tag %d in string.buffer.decode", (int)tag);
+      break;
+  }
+}
+
+static int buf_encode (lua_State *L) {
+  EncBuffer b;
+  luaL_checkany(L, 1);
+  lua_newuserdatauv(L, 128, 0);
+  b.boxidx = lua_gettop(L);
+  b.size = 0;
+  b.capacity = 128;
+  enc_val(L, &b, 1, 0);
+  lua_pushlstring(L, (const char *)lua_touserdata(L, b.boxidx), b.size);
+  return 1;
+}
+
+static int buf_decode (lua_State *L) {
+  size_t len;
+  const char *s = luaL_checklstring(L, 1, &len);
+  DecBuffer d;
+  d.p = (const uint8_t *)s;
+  d.end = (const uint8_t *)s + len;
+  dec_val(L, &d, 0);
+  return 1;
+}
+
+static const luaL_Reg strbuf_funcs[] = {
+  {"encode", buf_encode},
+  {"decode", buf_decode},
+  {NULL, NULL}
+};
+
+LUAMOD_API int luaopen_string_buffer (lua_State *L) {
+  luaL_newlib(L, strbuf_funcs);
+  lua_getglobal(L, "string");
+  if (lua_istable(L, -1)) {
+    lua_pushvalue(L, -2);
+    lua_setfield(L, -2, "buffer");
+  }
+  lua_pop(L, 1);
+  return 1;
+}
+
+
+/*
 ** Standard Libraries. (Must be listed in the same ORDER of their
 ** respective constants LUA_<libname>K.)
 */
@@ -312,6 +514,8 @@ LUALIB_API void luaL_openselectedlibs (lua_State *L, int load, int preload) {
     lua_pushcfunction(L, luaopen_jit);
     lua_setfield(L, -2, "jit");
   }
+  lua_pushcfunction(L, luaopen_string_buffer);
+  lua_setfield(L, -2, "string.buffer");
   lua_pop(L, 1);  /* remove PRELOAD table */
 }
 
