@@ -587,8 +587,18 @@ int luaV_lessequal (lua_State *L, const TValue *l, const TValue *r) {
 */
 int luaV_equalobj (lua_State *L, const TValue *t1, const TValue *t2) {
   const TValue *tm;
-  if (ttype(t1) != ttype(t2))  /* not the same type? */
+  if (ttype(t1) != ttype(t2)) { /* not the same type? */
+    if (L != NULL && (ttisfulluserdata(t1) || ttisfulluserdata(t2))) {
+      tm = ttisfulluserdata(t1) ? fasttm(L, uvalue(t1)->metatable, TM_EQ) : NULL;
+      if (tm == NULL && ttisfulluserdata(t2))
+        tm = fasttm(L, uvalue(t2)->metatable, TM_EQ);
+      if (tm != NULL) {
+        int tag = luaT_callTMres(L, tm, t1, t2, L->top.p);
+        return !tagisfalse(tag);
+      }
+    }
     return 0;
+  }
   else if (ttypetag(t1) != ttypetag(t2)) {
     switch (ttypetag(t1)) {
       case LUA_VNUMINT: {  /* integer == float? */
@@ -877,7 +887,7 @@ void luaV_finishOp (lua_State *L) {
     case OP_LT: case OP_LE:
     case OP_LTI: case OP_LEI:
     case OP_GTI: case OP_GEI:
-    case OP_EQ: {  /* note that 'OP_EQI'/'OP_EQK' cannot yield */
+    case OP_EQ: case OP_EQI: case OP_EQK: {  /* Note: OP_EQI and OP_EQK can also yield via userdata __eq */
       int res = !l_isfalse(s2v(L->top.p - 1));
       L->top.p--;
       lua_assert(GET_OPCODE(*ci->u.l.savedpc) == OP_JMP);
@@ -1673,7 +1683,11 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         StkId ra = RA(i);
         TValue *rb = KB(i);
         /* basic types do not use '__eq'; we can use raw equality */
-        int cond = luaV_rawequalobj(s2v(ra), rb);
+        int cond;
+        if (ttisfulluserdata(s2v(ra)))
+          Protect(cond = luaV_equalobj(L, s2v(ra), rb));
+        else
+          cond = luaV_rawequalobj(s2v(ra), rb);
         docondjump();
         vmbreak;
       }
@@ -1685,6 +1699,16 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
           cond = (ivalue(s2v(ra)) == im);
         else if (ttisfloat(s2v(ra)))
           cond = luai_numeq(fltvalue(s2v(ra)), cast_num(im));
+        else if (ttisfulluserdata(s2v(ra))) {
+          TValue tv;
+          if (GETARG_C(i)) {
+            setfltvalue(&tv, cast_num(im));
+          }
+          else {
+            setivalue(&tv, im);
+          }
+          Protect(cond = luaV_equalobj(L, s2v(ra), &tv));
+        }
         else
           cond = 0;  /* other types cannot be equal to a number */
         docondjump();

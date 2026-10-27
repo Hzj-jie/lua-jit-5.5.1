@@ -640,8 +640,7 @@ static const char *funcnamefromcode (lua_State *L, const Proto *p,
     case OP_BNOT: tm = TM_BNOT; break;
     case OP_LEN: tm = TM_LEN; break;
     case OP_CONCAT: tm = TM_CONCAT; break;
-    case OP_EQ: tm = TM_EQ; break;
-    /* no cases for OP_EQI and OP_EQK, as they don't call metamethods */
+    case OP_EQ: case OP_EQI: case OP_EQK: tm = TM_EQ; break;  /* OP_EQ, OP_EQI, and OP_EQK may call metamethods */
     case OP_LT: case OP_LTI: case OP_GTI: tm = TM_LT; break;
     case OP_LE: case OP_LEI: case OP_GEI: tm = TM_LE; break;
     case OP_CLOSE: case OP_RETURN: tm = TM_CLOSE; break;

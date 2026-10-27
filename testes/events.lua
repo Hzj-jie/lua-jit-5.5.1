@@ -516,6 +516,62 @@ child = setmetatable({}, parent)
 child.foo = 10      --> CRASH (on some machines)
 assert(T == parent and K == "foo" and V == 10)
 
+do
+  -- cross-type userdata __eq metamethod (LuaJIT compatibility)
+  local f = io.tmpfile()
+  local orig_mt = debug.getmetatable(f)
+  local mt = {
+    __eq = function (a, b)
+      if type(a) == "userdata" and b == nil then return true end
+      if type(b) == "userdata" and a == nil then return true end
+      if type(a) == "userdata" and b == 0 then return true end
+      if type(b) == "userdata" and a == 0 then return true end
+      if type(a) == "userdata" and b == 42 then return true end
+      if type(b) == "userdata" and a == 42 then return true end
+      return false
+    end
+  }
+  debug.setmetatable(f, mt)
+  assert(f == nil)
+  assert(nil == f)
+  assert(f == 0)
+  assert(0 == f)
+  assert(f == 42)
+  assert(42 == f)
+  local zero = 0
+  assert(f == zero)
+  assert(zero == f)
+  local other = 99
+  assert(not (f == other))
+  assert(not (other == f))
+  assert(not (f == "hello"))
+  assert(not ("hello" == f))
+  debug.setmetatable(f, orig_mt)
+  f:close()
+end
+
+do
+  -- coroutine yield test for OP_EQK / OP_EQI (luaV_finishOp)
+  local f = io.tmpfile()
+  local orig_mt = debug.getmetatable(f)
+  debug.setmetatable(f, {
+    __eq = function ()
+      coroutine.yield("y")
+      return true
+    end
+  })
+  local co = coroutine.wrap(function ()
+    return f == nil, f == 0, f == 0.0
+  end)
+  assert(co() == "y")
+  assert(co() == "y")
+  assert(co() == "y")
+  local a, b, c = co()
+  assert(a == true and b == true and c == true)
+  debug.setmetatable(f, orig_mt)
+  f:close()
+end
+
 print 'OK'
 
 return 12
