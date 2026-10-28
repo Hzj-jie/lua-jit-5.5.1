@@ -69,6 +69,8 @@ checkerr("invalid mode", io.open, file, "b")
 assert(io.open(file, "r+b")):close()
 assert(io.open(file, "r+")):close()
 assert(io.open(file, "rb")):close()
+assert(io.open(file, "re")):close()
+assert(io.open(file, "r+e")):close()
 
 assert(os.setlocale('C', 'all'))
 
