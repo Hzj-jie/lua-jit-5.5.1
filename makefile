@@ -105,9 +105,12 @@ LIB_O=	lbaselib.o ldblib.o liolib.o lmathlib.o loslib.o ltablib.o lstrlib.o \
 LUA_T=	lua
 LUA_O=	lua.o
 
+LUAC_T=	luac
+LUAC_O=	luac.o
 
-ALL_T= $(CORE_T) $(LUA_T)
-ALL_O= $(CORE_O) $(LUA_O) $(AUX_O) $(LIB_O)
+
+ALL_T= $(CORE_T) $(LUA_T) $(LUAC_T)
+ALL_O= $(CORE_O) $(LUA_O) $(LUAC_O) $(AUX_O) $(LIB_O)
 ALL_A= $(CORE_T)
 
 all:	$(ALL_T)
@@ -123,6 +126,9 @@ $(CORE_T): $(CORE_O) $(AUX_O) $(LIB_O)
 
 $(LUA_T): $(LUA_O) $(CORE_T)
 	$(CC) -o $@ $(MYLDFLAGS) $(LUA_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
+
+$(LUAC_T): $(LUAC_O) $(CORE_T)
+	$(CC) -o $@ $(MYLDFLAGS) $(LUAC_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
 
 
 clean:
@@ -210,6 +216,9 @@ ltests.o: ltests.c lprefix.h lua.h luaconf.h lapi.h llimits.h lstate.h \
 ltm.o: ltm.c lprefix.h lua.h luaconf.h ldebug.h lstate.h lobject.h \
  llimits.h ltm.h lzio.h lmem.h ldo.h lgc.h lstring.h ltable.h lvm.h
 lua.o: lua.c lprefix.h lua.h luaconf.h lauxlib.h lualib.h llimits.h
+luac.o: luac.c lprefix.h lua.h luaconf.h lauxlib.h lapi.h llimits.h \
+  lstate.h lobject.h ltm.h lzio.h lmem.h ldebug.h lopcodes.h lopnames.h \
+  lundump.h
 lundump.o: lundump.c lprefix.h lua.h luaconf.h ldebug.h lstate.h \
  lobject.h llimits.h ltm.h lzio.h lmem.h ldo.h lfunc.h lstring.h lgc.h \
  ltable.h lundump.h

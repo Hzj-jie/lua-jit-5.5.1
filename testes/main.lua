@@ -500,6 +500,14 @@ prepfile[[
 RUN('lua %s > %s', prog, out)
 checkprogout("120\nOk\n")
 
+-- testing luac: it must compile with this interpreter's parser
+do
+  local luac = string.gsub(progname, "lua$", "luac")
+  prepfile("local s = 0 for i = 1, 3 do i = i * 2 s = s + i end print(s, 1LL)")
+  assert(os.execute(string.format('"%s" -o "%s" "%s"', luac, otherprog, prog)) == 0)
+  RUN('lua "%s" > "%s"', otherprog, out)
+  checkout("12\t1\n")
+end
 
 -- remove temporary files
 assert(os.remove(prog))
