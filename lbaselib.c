@@ -609,6 +609,32 @@ static int luaB_tostring (lua_State *L) {
 }
 
 
+static int luaB_newproxy (lua_State *L) {
+  lua_settop(L, 1);
+  lua_newuserdatauv(L, 0, 0);  /* create proxy */
+  if (lua_toboolean(L, 1) == 0)
+    return 1;  /* no metatable */
+  else if (lua_isboolean(L, 1)) {
+    lua_newtable(L);  /* create a new metatable */
+    lua_pushvalue(L, -1);
+    lua_pushboolean(L, 1);
+    lua_rawset(L, lua_upvalueindex(1));
+  }
+  else {
+    int validproxy = 0;
+    if (lua_getmetatable(L, 1)) {
+      lua_rawget(L, lua_upvalueindex(1));
+      validproxy = lua_toboolean(L, -1);
+      lua_pop(L, 1);
+    }
+    luaL_argcheck(L, validproxy, 1, "boolean or proxy expected");
+    lua_getmetatable(L, 1);
+  }
+  lua_setmetatable(L, 2);
+  return 1;
+}
+
+
 static const luaL_Reg base_funcs[] = {
   {"assert", luaB_assert},
   {"collectgarbage", luaB_collectgarbage},
@@ -654,6 +680,14 @@ LUAMOD_API int luaopen_base (lua_State *L) {
   /* set global _VERSION */
   lua_pushliteral(L, LUA_VERSION);
   lua_setfield(L, -2, "_VERSION");
+  /* newproxy with weak-keyed metatable cache */
+  lua_createtable(L, 0, 1);
+  lua_pushvalue(L, -1);
+  lua_setmetatable(L, -2);
+  lua_pushliteral(L, "kv");
+  lua_setfield(L, -2, "__mode");
+  lua_pushcclosure(L, luaB_newproxy, 1);
+  lua_setfield(L, -2, "newproxy");
   return 1;
 }
 

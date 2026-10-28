@@ -37,6 +37,30 @@ assert(setmetatable(a,nil) == a)
 assert(getmetatable(a) == nil)
 assert(setmetatable(a,t) == a)
 
+-- testing newproxy
+local p1 = newproxy(true)
+assert(type(p1) == "userdata")
+assert(type(debug.getmetatable(p1)) == "table")
+local p2 = newproxy(p1)
+assert(debug.getmetatable(p2) == debug.getmetatable(p1))
+local p3 = newproxy(false)
+assert(type(p3) == "userdata")
+assert(debug.getmetatable(p3) == nil)
+local p4 = newproxy()
+assert(debug.getmetatable(p4) == nil)
+assert(not pcall(newproxy, {}))
+assert(not pcall(newproxy, 123))
+assert(not pcall(newproxy, io.stdout))
+
+local gc_fired = false
+local p_gc = newproxy(true)
+debug.setmetatable(p_gc, {
+  __gc = function() gc_fired = true end
+})
+p_gc = nil
+collectgarbage()
+assert(gc_fired == true)
+
 
 function f (t, i, e)
   assert(not e)
