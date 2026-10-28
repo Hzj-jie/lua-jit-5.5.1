@@ -50,6 +50,8 @@ void luaT_init (lua_State *L) {
     G(L)->tmname[i] = luaS_new(L, luaT_eventname[i]);
     luaC_fix(L, obj2gco(G(L)->tmname[i]));  /* never collect these names */
   }
+  G(L)->cdata_payload_str = luaS_new(L, "__cdata_payload");
+  luaC_fix(L, obj2gco(G(L)->cdata_payload_str));
 }
 
 

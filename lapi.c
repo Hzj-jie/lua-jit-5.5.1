@@ -294,13 +294,13 @@ LUA_API void lua_pushvalue (lua_State *L, int idx) {
 */
 
 
-LUA_API int lua_type (lua_State *L, int idx) {
+LUA_API int lua55_type (lua_State *L, int idx) {
   const TValue *o = index2value(L, idx);
   return (isvalid(L, o) ? ttype(o) : LUA_TNONE);
 }
 
 
-LUA_API const char *lua_typename (lua_State *L, int t) {
+LUA_API const char *lua55_typename (lua_State *L, int t) {
   UNUSED(L);
   api_check(L, LUA_TNONE <= t && t < LUA_NUMTYPES, "invalid type");
   return ttypename(t);
@@ -504,7 +504,7 @@ LUA_API lua_State *lua_tothread (lua_State *L, int idx) {
 ** a 'size_t'. (As the returned pointer is only informative, this
 ** conversion should not be a problem.)
 */
-LUA_API const void *lua_topointer (lua_State *L, int idx) {
+LUA_API const void *lua55_topointer (lua_State *L, int idx) {
   const TValue *o = index2value(L, idx);
   switch (ttypetag(o)) {
     case LUA_VLCF: return cast_voidp(cast_sizet(fvalue(o)));
@@ -1605,4 +1605,45 @@ LUA_API void lua_rawseti (lua_State *L, int idx, int n) {
   lua55_rawseti(L, idx, (lua_Integer)n);
 }
 
+static int is_cdata (lua_State *L, const TValue *o, void **payload) {
+  if (ttisfulluserdata(o)) {
+    Table *mt = uvalue(o)->metatable;
+    if (mt != NULL) {
+      const TValue *v = luaH_Hgetshortstr(mt, G(L)->cdata_payload_str);
+      if (ttislightuserdata(v)) {
+        if (payload != NULL) {
+          void *(*fn)(void *) = cast(void *(*)(void *), pvalue(v));
+          *payload = fn(getudatamem(uvalue(o)));
+        }
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
 
+#undef lua_type
+LUA_API int lua_type (lua_State *L, int idx) {
+  const TValue *o = index2value(L, idx);
+  if (!isvalid(L, o))
+    return LUA_TNONE;
+  if (is_cdata(L, o, NULL))
+    return 10;
+  return ttype(o);
+}
+
+#undef lua_typename
+LUA_API const char *lua_typename (lua_State *L, int t) {
+  if (t == 10)
+    return "cdata";
+  return lua55_typename(L, t);
+}
+
+#undef lua_topointer
+LUA_API const void *lua_topointer (lua_State *L, int idx) {
+  const TValue *o = index2value(L, idx);
+  void *payload = NULL;
+  if (is_cdata(L, o, &payload))
+    return payload;
+  return lua55_topointer(L, idx);
+}

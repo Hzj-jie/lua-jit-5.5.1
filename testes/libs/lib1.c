@@ -69,9 +69,19 @@ static int try_access_env (lua_State *L) {
 #undef lua_rawgeti
 #undef lua_rawseti
 #undef lua_tointeger
+#undef lua_type
+#undef lua_typename
+#undef lua_topointer
 extern int (lua_rawgeti) (lua_State *L, int idx, int n);
 extern void (lua_rawseti) (lua_State *L, int idx, int n);
 extern ptrdiff_t (lua_tointeger) (lua_State *L, int idx);
+extern int (lua_type) (lua_State *L, int idx);
+extern const char *(lua_typename) (lua_State *L, int tp);
+extern const void *(lua_topointer) (lua_State *L, int idx);
+
+static void *dummy_payload (void *ud) {
+  return (char *)ud + 8;
+}
 
 
 LUAMOD_API int test_c_abi (lua_State *L) {
@@ -181,6 +191,20 @@ LUAMOD_API int test_c_abi (lua_State *L) {
   lua_pushcfunction(L, try_replace_globals);
   if (lua_pcall(L, 0, 0, 0) == 0)
     return luaL_error(L, "replacing -10002 should fail");
+  lua_pop(L, 1);
+
+  /* 11. cdata 5.1 ABI check: lua_type == 10, lua_topointer == payload, lua_typename == "cdata" */
+  ud = lua_newuserdata(L, 32);
+  lua_newtable(L);
+  lua_pushlightuserdata(L, (void *)dummy_payload);
+  lua_setfield(L, -2, "__cdata_payload");
+  lua_setmetatable(L, -2);
+  if (lua_type(L, -1) != 10)
+    return luaL_error(L, "cdata lua_type != 10");
+  if (lua_topointer(L, -1) != (char *)ud + 8)
+    return luaL_error(L, "cdata lua_topointer failed");
+  if (strcmp(lua_typename(L, 10), "cdata") != 0)
+    return luaL_error(L, "lua_typename(10) != cdata");
   lua_pop(L, 1);
 
   lua_pushboolean(L, 1);

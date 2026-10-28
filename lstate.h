@@ -365,6 +365,7 @@ typedef struct global_State {
   lua_CFunction panic;  /* to be called in unprotected errors */
   TString *memerrmsg;  /* message for memory-allocation errors */
   TString *tmname[TM_N];  /* array with tag-method names */
+  TString *cdata_payload_str;  /* pre-interned __cdata_payload for 5.1 C ABI */
   struct Table *mt[LUA_NUMTYPES];  /* metatables for basic types */
   TString *strcache[STRCACHE_N][STRCACHE_M];  /* cache for strings in API */
   lua_WarnFunction warnf;  /* warning function */

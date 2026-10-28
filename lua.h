@@ -198,8 +198,12 @@ LUA_API int             (lua_isstring) (lua_State *L, int idx);
 LUA_API int             (lua_iscfunction) (lua_State *L, int idx);
 LUA_API int             (lua_isinteger) (lua_State *L, int idx);
 LUA_API int             (lua_isuserdata) (lua_State *L, int idx);
+LUA_API int             (lua55_type) (lua_State *L, int idx);
 LUA_API int             (lua_type) (lua_State *L, int idx);
+#define lua_type	lua55_type
+LUA_API const char     *(lua55_typename) (lua_State *L, int tp);
 LUA_API const char     *(lua_typename) (lua_State *L, int tp);
+#define lua_typename	lua55_typename
 
 LUA_API lua_Number      (lua_tonumberx) (lua_State *L, int idx, int *isnum);
 LUA_API lua_Integer     (lua55_tointegerx) (lua_State *L, int idx, int *isnum);
@@ -211,7 +215,9 @@ LUA_API lua_Unsigned    (lua_rawlen) (lua_State *L, int idx);
 LUA_API lua_CFunction   (lua_tocfunction) (lua_State *L, int idx);
 LUA_API void	       *(lua_touserdata) (lua_State *L, int idx);
 LUA_API lua_State      *(lua_tothread) (lua_State *L, int idx);
+LUA_API const void     *(lua55_topointer) (lua_State *L, int idx);
 LUA_API const void     *(lua_topointer) (lua_State *L, int idx);
+#define lua_topointer	lua55_topointer
 
 
 /*
