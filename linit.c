@@ -392,7 +392,7 @@ static void enc_val (lua_State *L, EncBuffer *b, int idx, int depth) {
         }
         else {
           double d = (double)iv;
-          if ((lua_Integer)d == iv) {
+          if (d < 9223372036854775808.0 && (lua_Integer)d == iv) {
             enc_byte(L, b, SER_TAG_NUM);
             enc_double(L, b, d);
           }
@@ -586,11 +586,14 @@ static void dec_val (lua_State *L, DecBuffer *d, int depth) {
     case 0x0c:
     case 0x0d: {
       uint32_t narray = 0, nhash = 0;
+      size_t rem;
       if (tp >= 0x0a)
         narray = dec_u124(L, d);
       if (tp & 1)
         nhash = dec_u124(L, d);
-      lua_createtable(L, narray > 0 ? (int)narray : 0, (int)nhash);
+      rem = (size_t)(d->end - d->p);
+      lua_createtable(L, narray <= rem ? (int)narray : (int)(rem + 1),
+                      nhash <= rem / 2 ? (int)nhash : (int)(rem / 2));
       if (narray > 0) {
         uint32_t start = (tp >= 0x0c) ? 1 : 0;
         uint32_t i;

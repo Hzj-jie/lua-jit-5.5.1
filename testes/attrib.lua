@@ -690,6 +690,20 @@ do
   -- error on unsupported type leaving GC in clean state and subsequent encode succeeding
   assert(not pcall(buffer.encode, { f = function() end }))
   assert(buffer.decode(buffer.encode({ ok = 1 })).ok == 1)
+
+  -- math.maxinteger and math.mininteger serialization
+  local maxint_enc = buffer.encode(math.maxinteger)
+  assert(maxint_enc:byte(1) == 0x10) -- SER_TAG_INT64
+  local maxint_dec = buffer.decode(maxint_enc)
+  assert(math.type(maxint_dec) == "integer" and maxint_dec == math.maxinteger)
+
+  local minint_enc = buffer.encode(math.mininteger)
+  local minint_dec = buffer.decode(minint_enc)
+  assert(minint_dec == math.mininteger)
+
+  -- Preallocation hint clamping on corrupt buffer
+  local ok_clamp, err_clamp = pcall(buffer.decode, "\x0c\xff\xff\xff\xff\x1f")
+  assert(not ok_clamp and err_clamp:find("unexpected end of buffer"))
 end
 
 print('OK')
