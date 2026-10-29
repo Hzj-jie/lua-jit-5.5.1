@@ -267,6 +267,21 @@ LUAMOD_API int luaopen_jit (lua_State *L) {
 ** LuaJIT-compatible 'string.buffer' module (encode/decode)
 */
 
+enum {
+  SER_TAG_NIL = 0x00,
+  SER_TAG_FALSE = 0x01,
+  SER_TAG_TRUE = 0x02,
+  SER_TAG_NULL = 0x03,
+  SER_TAG_LIGHTUD32 = 0x04,
+  SER_TAG_LIGHTUD64 = 0x05,
+  SER_TAG_INT = 0x06,
+  SER_TAG_NUM = 0x07,
+  SER_TAG_TAB = 0x08,
+  SER_TAG_INT64 = 0x10,
+  SER_TAG_UINT64 = 0x11,
+  SER_TAG_STR = 0x20
+};
+
 typedef struct {
   int boxidx;
   size_t size;
@@ -294,56 +309,163 @@ static void enc_byte (lua_State *L, EncBuffer *b, uint8_t byte) {
   enc_write(L, b, &byte, 1);
 }
 
+static void enc_le32 (lua_State *L, EncBuffer *b, uint32_t v) {
+  uint8_t buf[4];
+  buf[0] = (uint8_t)(v & 0xff);
+  buf[1] = (uint8_t)((v >> 8) & 0xff);
+  buf[2] = (uint8_t)((v >> 16) & 0xff);
+  buf[3] = (uint8_t)((v >> 24) & 0xff);
+  enc_write(L, b, buf, 4);
+}
+
+static void enc_le64 (lua_State *L, EncBuffer *b, uint64_t v) {
+  uint8_t buf[8];
+  buf[0] = (uint8_t)(v & 0xff);
+  buf[1] = (uint8_t)((v >> 8) & 0xff);
+  buf[2] = (uint8_t)((v >> 16) & 0xff);
+  buf[3] = (uint8_t)((v >> 24) & 0xff);
+  buf[4] = (uint8_t)((v >> 32) & 0xff);
+  buf[5] = (uint8_t)((v >> 40) & 0xff);
+  buf[6] = (uint8_t)((v >> 48) & 0xff);
+  buf[7] = (uint8_t)((v >> 56) & 0xff);
+  enc_write(L, b, buf, 8);
+}
+
+static void enc_double (lua_State *L, EncBuffer *b, double v) {
+  union { double d; uint64_t u; } u;
+  u.d = v;
+  enc_le64(L, b, u.u);
+}
+
+static void enc_u124 (lua_State *L, EncBuffer *b, uint32_t v) {
+  if (v < 0xe0) {
+    enc_byte(L, b, (uint8_t)v);
+  }
+  else if (v < 0x1fe0) {
+    uint8_t buf[2];
+    v -= 0xe0;
+    buf[0] = (uint8_t)(0xe0 | (v >> 8));
+    buf[1] = (uint8_t)(v & 0xff);
+    enc_write(L, b, buf, 2);
+  }
+  else {
+    enc_byte(L, b, 0xff);
+    enc_le32(L, b, v);
+  }
+}
+
 static void enc_val (lua_State *L, EncBuffer *b, int idx, int depth) {
   int t;
-  luaL_checkstack(L, 3, "buffer overflow");
+  luaL_checkstack(L, 5, "buffer overflow");
   if (depth > 256)
     luaL_error(L, "nesting too deep in string.buffer.encode");
   idx = lua_absindex(L, idx);
   t = lua_type(L, idx);
   switch (t) {
     case LUA_TNIL:
-      enc_byte(L, b, 0);
+      enc_byte(L, b, SER_TAG_NIL);
       break;
     case LUA_TBOOLEAN:
-      enc_byte(L, b, (uint8_t)(lua_toboolean(L, idx) ? 2 : 1));
+      enc_byte(L, b, (uint8_t)(lua_toboolean(L, idx) ? SER_TAG_TRUE : SER_TAG_FALSE));
       break;
+    case LUA_TLIGHTUSERDATA: {
+      void *p = lua_touserdata(L, idx);
+      if (p == NULL) {
+        enc_byte(L, b, SER_TAG_NULL);
+      }
+      else if (sizeof(void *) == 4 || (uintptr_t)p <= 0xffffffffu) {
+        enc_byte(L, b, SER_TAG_LIGHTUD32);
+        enc_le32(L, b, (uint32_t)(uintptr_t)p);
+      }
+      else {
+        enc_byte(L, b, SER_TAG_LIGHTUD64);
+        enc_le64(L, b, (uint64_t)(uintptr_t)p);
+      }
+      break;
+    }
     case LUA_TNUMBER: {
       if (lua_isinteger(L, idx)) {
-        int64_t v = (int64_t)lua_tointeger(L, idx);
-        enc_byte(L, b, 3);
-        enc_write(L, b, &v, sizeof(v));
+        lua_Integer iv = lua_tointeger(L, idx);
+        if (iv >= INT32_MIN && iv <= INT32_MAX) {
+          enc_byte(L, b, SER_TAG_INT);
+          enc_le32(L, b, (uint32_t)(int32_t)iv);
+        }
+        else {
+          double d = (double)iv;
+          if ((lua_Integer)d == iv) {
+            enc_byte(L, b, SER_TAG_NUM);
+            enc_double(L, b, d);
+          }
+          else {
+            enc_byte(L, b, SER_TAG_INT64);
+            enc_le64(L, b, (uint64_t)(int64_t)iv);
+          }
+        }
       }
       else {
         double v = (double)lua_tonumber(L, idx);
-        enc_byte(L, b, 4);
-        enc_write(L, b, &v, sizeof(v));
+        enc_byte(L, b, SER_TAG_NUM);
+        enc_double(L, b, v);
       }
       break;
     }
     case LUA_TSTRING: {
       size_t len;
       const char *s = lua_tolstring(L, idx, &len);
-      uint32_t ulen = (uint32_t)len;
-      enc_byte(L, b, 5);
-      enc_write(L, b, &ulen, sizeof(ulen));
+      if (len > (size_t)(0xffffffffu - (uint32_t)SER_TAG_STR))
+        luaL_error(L, "string too long in string.buffer.encode");
+      enc_u124(L, b, (uint32_t)SER_TAG_STR + (uint32_t)len);
       enc_write(L, b, s, len);
       break;
     }
     case LUA_TTABLE: {
-      uint32_t count = 0;
+      uint32_t n = (uint32_t)lua_rawlen(L, idx);
+      uint32_t nhash = 0;
+      uint8_t tag;
+      uint32_t i;
+
       lua_pushnil(L);
       while (lua_next(L, idx)) {
-        count++;
+        if (!(lua_isinteger(L, -2) &&
+              lua_tointeger(L, -2) >= 1 &&
+              (uint64_t)lua_tointeger(L, -2) <= (uint64_t)n)) {
+          nhash++;
+        }
         lua_pop(L, 1);
       }
-      enc_byte(L, b, 6);
-      enc_write(L, b, &count, sizeof(count));
-      lua_pushnil(L);
-      while (lua_next(L, idx)) {
-        enc_val(L, b, -2, depth + 1);
-        enc_val(L, b, -1, depth + 1);
-        lua_pop(L, 1);
+
+      if (n > 0)
+        tag = (uint8_t)(nhash > 0 ? 0x0d : 0x0c);
+      else if (nhash > 0)
+        tag = 0x09;
+      else
+        tag = 0x08;
+
+      enc_byte(L, b, tag);
+      if (n > 0)
+        enc_u124(L, b, n + 1);
+      if (nhash > 0)
+        enc_u124(L, b, nhash);
+
+      if (n > 0) {
+        for (i = 1; i <= n; i++) {
+          lua_rawgeti(L, idx, (lua_Integer)i);
+          enc_val(L, b, -1, depth + 1);
+          lua_pop(L, 1);
+        }
+      }
+
+      if (nhash > 0) {
+        lua_pushnil(L);
+        while (lua_next(L, idx)) {
+          if (!(lua_isinteger(L, -2) &&
+                lua_tointeger(L, -2) >= 1 &&
+                (uint64_t)lua_tointeger(L, -2) <= (uint64_t)n)) {
+            enc_val(L, b, -2, depth + 1);
+            enc_val(L, b, -1, depth + 1);
+          }
+          lua_pop(L, 1);
+        }
       }
       break;
     }
@@ -360,7 +482,7 @@ typedef struct {
 
 static void dec_read (lua_State *L, DecBuffer *d, void *dest, size_t n) {
   if ((size_t)(d->end - d->p) < n)
-    luaL_error(L, "truncated buffer in string.buffer.decode");
+    luaL_error(L, "unexpected end of buffer");
   memcpy(dest, d->p, n);
   d->p += n;
 }
@@ -371,56 +493,150 @@ static uint8_t dec_byte (lua_State *L, DecBuffer *d) {
   return b;
 }
 
+static uint32_t dec_le32 (lua_State *L, DecBuffer *d) {
+  uint8_t buf[4];
+  dec_read(L, d, buf, 4);
+  return (uint32_t)buf[0] |
+         ((uint32_t)buf[1] << 8) |
+         ((uint32_t)buf[2] << 16) |
+         ((uint32_t)buf[3] << 24);
+}
+
+static uint64_t dec_le64 (lua_State *L, DecBuffer *d) {
+  uint8_t buf[8];
+  dec_read(L, d, buf, 8);
+  return (uint64_t)buf[0] |
+         ((uint64_t)buf[1] << 8) |
+         ((uint64_t)buf[2] << 16) |
+         ((uint64_t)buf[3] << 24) |
+         ((uint64_t)buf[4] << 32) |
+         ((uint64_t)buf[5] << 40) |
+         ((uint64_t)buf[6] << 48) |
+         ((uint64_t)buf[7] << 56);
+}
+
+static double dec_double (lua_State *L, DecBuffer *d) {
+  union { double d; uint64_t u; } u;
+  u.u = dec_le64(L, d);
+  return u.d;
+}
+
+static uint32_t dec_u124 (lua_State *L, DecBuffer *d) {
+  uint8_t b0 = dec_byte(L, d);
+  if (b0 < 0xe0)
+    return (uint32_t)b0;
+  if (b0 != 0xff) {
+    uint8_t b1 = dec_byte(L, d);
+    return (((uint32_t)(b0 & 0x1f)) << 8) + (uint32_t)b1 + 0xe0;
+  }
+  return dec_le32(L, d);
+}
+
 static void dec_val (lua_State *L, DecBuffer *d, int depth) {
-  uint8_t tag;
-  luaL_checkstack(L, 3, "buffer overflow");
+  uint32_t tp;
+  luaL_checkstack(L, 5, "buffer overflow");
   if (depth > 256)
     luaL_error(L, "nesting too deep in string.buffer.decode");
-  tag = dec_byte(L, d);
-  switch (tag) {
-    case 0:
+  tp = dec_u124(L, d);
+  if (tp >= (uint32_t)SER_TAG_STR) {
+    uint32_t len = tp - (uint32_t)SER_TAG_STR;
+    if ((size_t)(d->end - d->p) < (size_t)len)
+      luaL_error(L, "unexpected end of buffer");
+    lua_pushlstring(L, (const char *)d->p, (size_t)len);
+    d->p += len;
+    return;
+  }
+  switch (tp) {
+    case SER_TAG_NIL:
       lua_pushnil(L);
       break;
-    case 1:
+    case SER_TAG_FALSE:
       lua_pushboolean(L, 0);
       break;
-    case 2:
+    case SER_TAG_TRUE:
       lua_pushboolean(L, 1);
       break;
-    case 3: {
-      int64_t v;
-      dec_read(L, d, &v, sizeof(v));
+    case SER_TAG_NULL:
+      lua_pushlightuserdata(L, NULL);
+      break;
+    case SER_TAG_LIGHTUD32: {
+      uint32_t v = dec_le32(L, d);
+      lua_pushlightuserdata(L, (void *)(uintptr_t)v);
+      break;
+    }
+    case SER_TAG_LIGHTUD64: {
+      uint64_t v = dec_le64(L, d);
+      lua_pushlightuserdata(L, (void *)(uintptr_t)v);
+      break;
+    }
+    case SER_TAG_INT: {
+      int32_t v = (int32_t)dec_le32(L, d);
       lua_pushinteger(L, (lua_Integer)v);
       break;
     }
-    case 4: {
-      double v;
-      dec_read(L, d, &v, sizeof(v));
+    case SER_TAG_NUM: {
+      double v = dec_double(L, d);
       lua_pushnumber(L, (lua_Number)v);
       break;
     }
-    case 5: {
-      uint32_t len;
-      dec_read(L, d, &len, sizeof(len));
-      if ((size_t)(d->end - d->p) < (size_t)len)
-        luaL_error(L, "truncated string in string.buffer.decode");
-      lua_pushlstring(L, (const char *)d->p, (size_t)len);
-      d->p += len;
-      break;
-    }
-    case 6: {
-      uint32_t count, i;
-      dec_read(L, d, &count, sizeof(count));
-      lua_createtable(L, 0, (int)count);
-      for (i = 0; i < count; i++) {
-        dec_val(L, d, depth + 1); /* key */
-        dec_val(L, d, depth + 1); /* value */
-        lua_settable(L, -3);
+    case 0x08:
+    case 0x09:
+    case 0x0a:
+    case 0x0b:
+    case 0x0c:
+    case 0x0d: {
+      uint32_t narray = 0, nhash = 0;
+      if (tp >= 0x0a)
+        narray = dec_u124(L, d);
+      if (tp & 1)
+        nhash = dec_u124(L, d);
+      lua_createtable(L, narray > 0 ? (int)narray : 0, (int)nhash);
+      if (narray > 0) {
+        uint32_t start = (tp >= 0x0c) ? 1 : 0;
+        uint32_t i;
+        for (i = start; i < narray; i++) {
+          dec_val(L, d, depth + 1);
+          if (!lua_isnil(L, -1))
+            lua_rawseti(L, -2, (lua_Integer)i);
+          else
+            lua_pop(L, 1);
+        }
+      }
+      if (nhash > 0) {
+        uint32_t i;
+        for (i = 0; i < nhash; i++) {
+          dec_val(L, d, depth + 1); /* key */
+          if (lua_isnil(L, -1))
+            luaL_error(L, "table key cannot be nil");
+          if (lua_isnumber(L, -1) && !lua_isinteger(L, -1)) {
+            lua_Number kn = lua_tonumber(L, -1);
+            if (kn != kn)
+              luaL_error(L, "table key cannot be NaN");
+          }
+          lua_pushvalue(L, -1);
+          if (lua_rawget(L, -3) != LUA_TNIL) {
+            lua_pop(L, 1);
+            luaL_error(L, "duplicate table key");
+          }
+          lua_pop(L, 1); /* pop nil */
+          dec_val(L, d, depth + 1); /* val */
+          lua_rawset(L, -3);
+        }
       }
       break;
     }
+    case SER_TAG_INT64: {
+      int64_t v = (int64_t)dec_le64(L, d);
+      lua_pushinteger(L, (lua_Integer)v);
+      break;
+    }
+    case SER_TAG_UINT64: {
+      uint64_t v = dec_le64(L, d);
+      lua_pushinteger(L, (lua_Integer)v);
+      break;
+    }
     default:
-      luaL_error(L, "invalid tag %d in string.buffer.decode", (int)tag);
+      luaL_error(L, "invalid tag %d in string.buffer.decode", (int)tp);
       break;
   }
 }
@@ -444,6 +660,8 @@ static int buf_decode (lua_State *L) {
   d.p = (const uint8_t *)s;
   d.end = (const uint8_t *)s + len;
   dec_val(L, &d, 0);
+  if (d.p != d.end)
+    luaL_error(L, "left-over data in buffer");
   return 1;
 }
 

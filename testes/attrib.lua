@@ -628,6 +628,43 @@ do
   local roundtrip = buffer.decode(buffer.encode({ a = 1, b = "two", c = { 3, 4 } }))
   assert(roundtrip.a == 1 and roundtrip.b == "two" and roundtrip.c[1] == 3 and roundtrip.c[2] == 4)
 
+  -- LuaJIT wire-format golden vectors
+  assert(buffer.encode(nil) == "\0")
+  assert(buffer.encode(false) == "\1")
+  assert(buffer.encode(true) == "\2")
+  assert(buffer.encode(0) == "\x06\0\0\0\0")
+  assert(buffer.encode(1) == "\x06\1\0\0\0")
+  assert(buffer.encode(-1) == "\x06\xff\xff\xff\xff")
+  assert(buffer.encode(100) == "\x06\x64\0\0\0")
+  assert(buffer.encode(0x12345678) == "\x06\x78\x56\x34\x12")
+  assert(buffer.encode(1.5) == "\x07\0\0\0\0\0\0\xf8\x3f")
+  assert(buffer.encode("") == "\x20")
+  assert(buffer.encode("a") == "\x21a")
+  assert(buffer.encode("abc") == "\x23abc")
+  assert(buffer.encode({}) == "\x08")
+  assert(buffer.encode({10, 20}) == "\x0c\x03\x06\x0a\0\0\0\x06\x14\0\0\0")
+  assert(buffer.encode(string.rep("x", 191)) == "\xdf" .. string.rep("x", 191))
+  assert(buffer.encode(string.rep("x", 192)) == "\xe0\x00" .. string.rep("x", 192))
+  assert(buffer.encode(string.rep("x", 8127)) == "\xfe\xff" .. string.rep("x", 8127))
+  assert(buffer.encode(string.rep("x", 8128)) == "\xff\xe0\x1f\0\0" .. string.rep("x", 8128))
+
+  -- Decoder compatibility with LuaJIT variants
+  assert(buffer.decode("\x07\0\0\0\0\0\0\x24\x40") == 10)
+  local t0 = buffer.decode("\x0a\x02\x06\x0a\0\0\0\x06\x14\0\0\0")
+  assert(t0[0] == 10 and t0[1] == 20)
+
+  -- Array with holes
+  local th = buffer.decode(buffer.encode({ [1] = 1, [3] = 3 }))
+  assert(th[1] == 1 and th[2] == nil and th[3] == 3)
+
+  -- Error conditions
+  local ok, err = pcall(buffer.decode, "")
+  assert(not ok and err:find("unexpected end of buffer"))
+  ok, err = pcall(buffer.decode, "\0extra")
+  assert(not ok and err:find("left%-over data in buffer"))
+  ok, err = pcall(buffer.decode, "\x09\x02\x21\x61\x06\x01\0\0\0\x21\x61\x06\x02\0\0\0")
+  assert(not ok and err:find("duplicate table key"))
+
   -- 100-deep nested table round-trip
   local deep100 = {}
   local curr = deep100

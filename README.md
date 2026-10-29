@@ -7,7 +7,7 @@ This repository is a fork of **Lua 5.5.1** modified to be **LuaJIT-compatible** 
 - **Lua 5.1 / LuaJIT C ABI:** Exports removed Lua 5.1 C API functions and `luaL_Buffer` routines, and translates Lua 5.1 pseudo-indices (`LUA_REGISTRYINDEX`, `LUA_GLOBALSINDEX`, upvalues).
 - **Syntax:** Supports `LL` / `ULL` 64-bit integer suffixes (producing plain 64-bit integers, with `ULL` above `INT64_MAX` wrapping) and mutable `for`-loop control variables.
 - **Runtime & Metamethods:** Supports cross-type userdata `__eq` comparisons (e.g., `cdata` with `nil`, numbers, or tables) and LuaJIT / Lua 5.1 number formatting (`tostring()` and `string.format`).
-- **Standard Library:** Includes built-in `bit`, `jit`, `string.buffer` (binary `encode`/`decode` object serialization, using its own binary tag format; data encoded by LuaJIT's string.buffer won't decode), `unpack`, `loadstring`, `table.maxn`, and `setfenv` / `getfenv`, plus LuaJIT-compatible `os.execute` status codes, `os.date` format flags (`%-`, `%_`), and `coroutine.running()` on the main thread.
+- **Standard Library:** Includes built-in `bit`, `jit`, `string.buffer` (LuaJIT-compatible binary `encode`/`decode` object serialization), `unpack`, `loadstring`, `table.maxn`, and `setfenv` / `getfenv`, plus LuaJIT-compatible `os.execute` status codes, `os.date` format flags (`%-`, `%_`), and `coroutine.running()` on the main thread.
 
 ---
 
