@@ -704,6 +704,16 @@ do
   -- Preallocation hint clamping on corrupt buffer
   local ok_clamp, err_clamp = pcall(buffer.decode, "\x0c\xff\xff\xff\xff\x1f")
   assert(not ok_clamp and err_clamp:find("unexpected end of buffer"))
+
+  -- Builtin ffi library preloaded
+  local old_type = _G.type
+  local old_tonumber = _G.tonumber
+  local ffi = require("ffi")
+  assert(type(ffi) == "table")
+  ffi.cdef("int getpid(void);")
+  assert(ffi.C.getpid() > 0)
+  _G.type = old_type
+  _G.tonumber = old_tonumber
 end
 
 print('OK')

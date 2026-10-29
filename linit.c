@@ -705,6 +705,9 @@ static const luaL_Reg stdlibs[] = {
 };
 
 
+extern int luaopen_ffi (lua_State *L);
+
+
 /*
 ** require and preload selected standard libraries
 */
@@ -737,6 +740,8 @@ LUALIB_API void luaL_openselectedlibs (lua_State *L, int load, int preload) {
   }
   lua_pushcfunction(L, luaopen_string_buffer);
   lua_setfield(L, -2, "string.buffer");
+  lua_pushcfunction(L, luaopen_ffi);
+  lua_setfield(L, -2, "ffi");
   lua_pop(L, 1);  /* remove PRELOAD table */
 }
 

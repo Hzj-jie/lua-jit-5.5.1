@@ -14,3 +14,9 @@ testes/libs/all
 temp
 lua
 luac
+
+cffi-lua-master/
+cffi-lua.zip
+libffi-*/
+libffi-*.tar.gz
+libcffi.a

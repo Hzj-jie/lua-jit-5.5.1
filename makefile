@@ -81,8 +81,15 @@ MYLIBS= -ldl
 
 
 CC= gcc
+CXX= g++
+HOST=
+FFI_CFLAGS= -O2
+MYCXXFLAGS=
+LIBFFI_VERSION= 3.8.0
+
 # (Optionally we can use -march=native -mno-avx512f.)
 CFLAGS= -Wall -O2 $(MYCFLAGS) -fno-stack-protector -fno-common
+CXXFLAGS= -std=c++14 -fvisibility=hidden -fno-exceptions -fno-rtti -O2 -Wall -Wextra -Wshadow -DFFI_LITTLE_ENDIAN $(MYCXXFLAGS)
 AR= ar rc
 RANLIB= ranlib
 RM= rm -f
@@ -91,8 +98,16 @@ RM= rm -f
 
 # == END OF USER SETTINGS. NO NEED TO CHANGE ANYTHING BELOW THIS LINE =========
 
+LIBFFI_DIR= libffi-$(LIBFFI_VERSION)
+LIBFFI_A= $(LIBFFI_DIR)/install/lib/libffi.a
+LIBFFI_INCLUDE= $(LIBFFI_DIR)/install/include
 
-LIBS = -lm
+CFFI_DIR= cffi-lua-master
+CFFI_O= cffi_util.o cffi_ffilib.o cffi_parser.o cffi_ast.o \
+	cffi_lib.o cffi_ffi.o cffi_main.o
+CFFI_T= libcffi.a
+
+LIBS = $(CFFI_T) -Wl,--exclude-libs,libffi.a:libcffi.a $(LIBFFI_A) -lm
 
 CORE_T=	liblua.a
 CORE_O=	lapi.o lcode.o lctype.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o \
@@ -109,30 +124,64 @@ LUAC_T=	luac
 LUAC_O=	luac.o
 
 
-ALL_T= $(CORE_T) $(LUA_T) $(LUAC_T)
+ALL_T= $(CORE_T) $(CFFI_T) $(LUA_T) $(LUAC_T)
 ALL_O= $(CORE_O) $(LUA_O) $(LUAC_O) $(AUX_O) $(LIB_O)
-ALL_A= $(CORE_T)
+ALL_A= $(CORE_T) $(CFFI_T)
 
 all:	$(ALL_T)
 	touch all
 
-o:	$(ALL_O)
+o:	$(ALL_O) $(CFFI_O)
 
 a:	$(ALL_A)
+
+fetch: $(LIBFFI_DIR) $(CFFI_DIR)
+
+$(LIBFFI_DIR):
+	echo "Fetching libffi-$(LIBFFI_VERSION)..." && \
+	wget "https://github.com/libffi/libffi/releases/download/v$(LIBFFI_VERSION)/libffi-$(LIBFFI_VERSION).tar.gz" -O libffi-$(LIBFFI_VERSION).tar.gz && \
+	tar -xzf libffi-$(LIBFFI_VERSION).tar.gz && \
+	rm -f libffi-$(LIBFFI_VERSION).tar.gz
+
+$(CFFI_DIR):
+	echo "Fetching cffi-lua..." && \
+	wget "https://github.com/hzj-jie/cffi-lua/archive/master.zip" -O cffi-lua.zip && \
+	echo "cffi-lua archive commit: $$(unzip -z cffi-lua.zip | tail -n 1)" && \
+	unzip -q cffi-lua.zip && \
+	rm -f cffi-lua.zip
+
+$(LIBFFI_A): | $(LIBFFI_DIR)
+	cd $(LIBFFI_DIR) && \
+	./configure --prefix="$(CURDIR)/$(LIBFFI_DIR)/install" \
+		--libdir="$(CURDIR)/$(LIBFFI_DIR)/install/lib" \
+		--enable-static --disable-shared --with-pic --disable-docs \
+		$(if $(HOST),--host=$(HOST) ac_cv_func_memfd_create=no) \
+		AR="$(firstword $(AR))" CC="$(CC)" CFLAGS="$(FFI_CFLAGS)" && \
+	$(MAKE) && $(MAKE) install
+
+$(CFFI_O): cffi_%.o: makefile | $(LIBFFI_A) $(CFFI_DIR)
+	$(CXX) $(CXXFLAGS) -I. -I$(CFFI_DIR)/src -I$(LIBFFI_INCLUDE) -c -o $@ $(CFFI_DIR)/src/$*.cc
+
+$(CFFI_T): $(CFFI_O)
+	$(AR) $@ $?
+	$(RANLIB) $@
 
 $(CORE_T): $(CORE_O) $(AUX_O) $(LIB_O)
 	$(AR) $@ $?
 	$(RANLIB) $@
 
-$(LUA_T): $(LUA_O) $(CORE_T)
+$(LUA_T): $(LUA_O) $(CORE_T) $(CFFI_T) $(LIBFFI_A)
 	$(CC) -o $@ $(MYLDFLAGS) $(LUA_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
 
-$(LUAC_T): $(LUAC_O) $(CORE_T)
+$(LUAC_T): $(LUAC_O) $(CORE_T) $(CFFI_T) $(LIBFFI_A)
 	$(CC) -o $@ $(MYLDFLAGS) $(LUAC_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
 
 
 clean:
-	$(RM) $(ALL_T) $(ALL_O)
+	$(RM) $(ALL_T) $(ALL_O) $(CFFI_T) $(CFFI_O) all
+
+distclean: clean
+	$(RM) -r $(LIBFFI_DIR) $(CFFI_DIR)
 
 depend:
 	@$(CC) $(CFLAGS) -MM *.c
