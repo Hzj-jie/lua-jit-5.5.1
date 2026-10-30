@@ -88,8 +88,9 @@ MYCXXFLAGS=
 LIBFFI_VERSION= 3.8.0
 
 # (Optionally we can use -march=native -mno-avx512f.)
-CFLAGS= -Wall -O2 $(MYCFLAGS) -fno-stack-protector -fno-common
-CXXFLAGS= -std=c++14 -fvisibility=hidden -fno-exceptions -fno-rtti -O2 -Wall -Wextra -Wshadow -DFFI_LITTLE_ENDIAN $(MYCXXFLAGS)
+CFLAGS= -Wall -O2 $(MYCFLAGS) -fno-stack-protector -fno-common -fno-pie
+CXXFLAGS= -std=c++14 -fvisibility=hidden -fno-exceptions -fno-rtti -fno-pie -O2 -Wall -Wextra -Wshadow -DFFI_LITTLE_ENDIAN $(MYCXXFLAGS)
+LDFLAGS= $(MYLDFLAGS) -no-pie
 AR= ar rc
 RANLIB= ranlib
 RM= rm -f
@@ -171,10 +172,10 @@ $(CORE_T): $(CORE_O) $(AUX_O) $(LIB_O)
 	$(RANLIB) $@
 
 $(LUA_T): $(LUA_O) $(CORE_T) $(CFFI_T) $(LIBFFI_A)
-	$(CC) -o $@ $(MYLDFLAGS) $(LUA_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
+	$(CC) -o $@ $(LDFLAGS) $(LUA_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
 
 $(LUAC_T): $(LUAC_O) $(CORE_T) $(CFFI_T) $(LIBFFI_A)
-	$(CC) -o $@ $(MYLDFLAGS) $(LUAC_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
+	$(CC) -o $@ $(LDFLAGS) $(LUAC_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
 
 
 clean:
